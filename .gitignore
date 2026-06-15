@@ -1,0 +1,21 @@
+# .NET
+bin/
+obj/
+[Dd]ebug/
+[Rr]elease/
+artifacts/
+TestResults/
+*.user
+*.suo
+
+# IDEs
+.vs/
+.idea/
+*.swp
+
+# macOS
+.DS_Store
+
+# Entorno local
+.env
+.env.local

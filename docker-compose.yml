@@ -8,8 +8,6 @@ services:
       CASSANDRA_CLUSTER_NAME: esports-cluster
       MAX_HEAP_SIZE: 512M
       HEAP_NEWSIZE: 128M
-    volumes:
-      - cassandra-data:/var/lib/cassandra
     healthcheck:
       test: ["CMD-SHELL", "cqlsh -e 'describe keyspaces' || exit 1"]
       interval: 15s
@@ -196,8 +194,8 @@ services:
     ports:
       - "3000:3000"
     depends_on:
-      gateway:
-        condition: service_healthy
+      seeder:
+        condition: service_completed_successfully
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]
       interval: 15s
@@ -216,11 +214,9 @@ services:
       GatewayUrl: http://gateway:8080
     depends_on:
       gateway:
-        condition: service_started
+        condition: service_healthy
     networks:
       - esports-net
-    profiles:
-      - seed
 
   tests:
     build:
@@ -230,15 +226,12 @@ services:
     environment:
       GATEWAY_URL: http://gateway:8080
     depends_on:
-      gateway:
-        condition: service_healthy
+      seeder:
+        condition: service_completed_successfully
     networks:
       - esports-net
     profiles:
       - test
-
-volumes:
-  cassandra-data:
 
 networks:
   esports-net:

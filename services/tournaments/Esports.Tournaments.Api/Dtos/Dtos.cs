@@ -35,6 +35,9 @@ public record TorneoResumenResponse(
 
 public record TorneoPorCodigoResponse(Guid TorneoId, string Nombre, DateTimeOffset FechaInicio);
 
+// Q9: torneos por videojuego (incluye organizador, no videojuego —  ya se sabe cuál es)
+public record TorneoPorVideojuegoResponse(Guid TorneoId, string NombreTorneo, string NombreOrganizador, DateTimeOffset FechaInicio);
+
 // Inscripciones
 public record InscribirEquipoRequest(Guid EquipoId);
 public record EquipoPorTorneoResponse(Guid EquipoId, string NombreEquipo, DateTimeOffset FechaInscripcion);

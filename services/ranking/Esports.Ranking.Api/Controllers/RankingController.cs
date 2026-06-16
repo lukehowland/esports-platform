@@ -1,3 +1,4 @@
+using Esports.Ranking.Api.Dtos;
 using Esports.Ranking.Api.Repositories;
 using Microsoft.AspNetCore.Mvc;
 
@@ -25,11 +26,11 @@ public class RankingController : ControllerBase
     public async Task<IActionResult> RankingJugadores([FromQuery] int top = 10)
         => Ok(await _repo.ObtenerRankingJugadoresAsync(top));
 
-    // Q24: estadísticas de un equipo en un torneo
+    // Q24: estadísticas de un equipo en un torneo (200 con ceros si aún no tiene partidas)
     [HttpGet("stats/equipo/{equipoId:guid}/torneo/{torneoId:guid}")]
     public async Task<IActionResult> StatsEquipoTorneo(Guid equipoId, Guid torneoId)
     {
         var result = await _repo.ObtenerStatsEquipoTorneoAsync(equipoId, torneoId);
-        return result is null ? NotFound() : Ok(result);
+        return Ok(result ?? new StatsEquipoTorneoResponse(equipoId, torneoId, 0L, 0L, 0L));
     }
 }

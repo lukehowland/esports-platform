@@ -17,6 +17,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Esports.Gateway", "gateway\
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Esports.Seeder", "tools\Esports.Seeder\Esports.Seeder.csproj", "{A7B8C9D0-E1F2-3456-0123-456789012346}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Esports.Gateway.Tests", "tests\Esports.Gateway.Tests\Esports.Gateway.Tests.csproj", "{B8C9D0E1-F2A3-4567-1234-567890123457}"
+EndProject
 Global
   GlobalSection(SolutionConfigurationPlatforms) = preSolution
     Debug|Any CPU = Debug|Any CPU
@@ -51,5 +53,9 @@ Global
     {A7B8C9D0-E1F2-3456-0123-456789012346}.Debug|Any CPU.Build.0 = Debug|Any CPU
     {A7B8C9D0-E1F2-3456-0123-456789012346}.Release|Any CPU.ActiveCfg = Release|Any CPU
     {A7B8C9D0-E1F2-3456-0123-456789012346}.Release|Any CPU.Build.0 = Release|Any CPU
+    {B8C9D0E1-F2A3-4567-1234-567890123457}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+    {B8C9D0E1-F2A3-4567-1234-567890123457}.Debug|Any CPU.Build.0 = Debug|Any CPU
+    {B8C9D0E1-F2A3-4567-1234-567890123457}.Release|Any CPU.ActiveCfg = Release|Any CPU
+    {B8C9D0E1-F2A3-4567-1234-567890123457}.Release|Any CPU.Build.0 = Release|Any CPU
   EndGlobalSection
 EndGlobal

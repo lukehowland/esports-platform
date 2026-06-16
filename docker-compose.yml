@@ -175,6 +175,12 @@ services:
         condition: service_healthy
       ranking:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
     networks:
       - esports-net
 
@@ -192,6 +198,21 @@ services:
       - esports-net
     profiles:
       - seed
+
+  tests:
+    build:
+      context: .
+      dockerfile: tests/Esports.Gateway.Tests/Dockerfile
+    container_name: esports-tests
+    environment:
+      GATEWAY_URL: http://gateway:8080
+    depends_on:
+      gateway:
+        condition: service_healthy
+    networks:
+      - esports-net
+    profiles:
+      - test
 
 volumes:
   cassandra-data:

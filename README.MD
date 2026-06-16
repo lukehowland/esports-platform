@@ -76,6 +76,26 @@ GET  /api/ranking/jugadores?top=10                   Q23
 GET  /api/stats/equipo/{equipoId}/torneo/{torneoId}  Q24
 ```
 
+## Tests de integración
+
+El proyecto incluye 97 tests de integración que verifican todas las funcionalidades (Q1–Q24) y casos de error a través del gateway.
+
+**Prerequisitos:** el stack debe estar levantado y el seeder debe haber corrido.
+
+```bash
+# Levantar stack + seeder (si no está levantado)
+docker compose up --build
+docker compose run --rm seeder
+
+# Ejecutar los tests
+docker compose run --rm tests
+```
+
+Los tests cubren:
+- Q1–Q24: todos los endpoints de lectura con resultados esperados exactos
+- Casos de error: 404, 400, cuerpos inválidos, GUIDs inexistentes, métodos HTTP incorrectos
+- Invariantes: orden descendente en rankings, bidireccionalidad en Q19, suma `victorias + derrotas = partidas_jugadas`
+
 ## Comandos útiles
 
 ```bash

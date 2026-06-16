@@ -10,7 +10,7 @@ public interface IVideojuegoRepository
     Task CrearAsync(Videojuego v);
     Task<Videojuego?> ObtenerPorIdAsync(Guid id);
     Task<IEnumerable<VideojuegoPorGeneroResponse>> ObtenerPorGeneroAsync(string genero);
-    Task<IEnumerable<TorneoResumenResponse>> ObtenerTorneosAsync(Guid videojuegoId);
+    Task<IEnumerable<TorneoPorVideojuegoResponse>> ObtenerTorneosAsync(Guid videojuegoId);
 }
 
 public class VideojuegoRepository : IVideojuegoRepository
@@ -53,10 +53,10 @@ public class VideojuegoRepository : IVideojuegoRepository
         return rows.Select(r => new VideojuegoPorGeneroResponse(r.GetValue<Guid>("videojuego_id"), r.GetValue<string>("nombre")));
     }
 
-    public async Task<IEnumerable<TorneoResumenResponse>> ObtenerTorneosAsync(Guid videojuegoId)
+    public async Task<IEnumerable<TorneoPorVideojuegoResponse>> ObtenerTorneosAsync(Guid videojuegoId)
     {
         var rows = await _session.ExecuteAsync(_selTorneos.Bind(videojuegoId));
-        return rows.Select(r => new TorneoResumenResponse(
+        return rows.Select(r => new TorneoPorVideojuegoResponse(
             r.GetValue<Guid>("torneo_id"),
             r.GetValue<string>("nombre_torneo"),
             r.GetValue<string>("nombre_organizador"),

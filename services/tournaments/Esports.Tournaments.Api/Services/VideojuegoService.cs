@@ -9,7 +9,7 @@ public interface IVideojuegoService
     Task<VideojuegoResponse> CrearAsync(CrearVideojuegoRequest req);
     Task<VideojuegoResponse?> ObtenerPorIdAsync(Guid id);
     Task<IEnumerable<VideojuegoPorGeneroResponse>> ObtenerPorGeneroAsync(string genero);
-    Task<IEnumerable<TorneoResumenResponse>> ObtenerTorneosAsync(Guid videojuegoId);
+    Task<IEnumerable<TorneoPorVideojuegoResponse>> ObtenerTorneosAsync(Guid videojuegoId);
 }
 
 public class VideojuegoService : IVideojuegoService
@@ -39,6 +39,6 @@ public class VideojuegoService : IVideojuegoService
     public Task<IEnumerable<VideojuegoPorGeneroResponse>> ObtenerPorGeneroAsync(string genero)
         => _repo.ObtenerPorGeneroAsync(genero);
 
-    public Task<IEnumerable<TorneoResumenResponse>> ObtenerTorneosAsync(Guid videojuegoId)
+    public Task<IEnumerable<TorneoPorVideojuegoResponse>> ObtenerTorneosAsync(Guid videojuegoId)
         => _repo.ObtenerTorneosAsync(videojuegoId);
 }

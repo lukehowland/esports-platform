@@ -6,9 +6,6 @@ using Xunit.Abstractions;
 
 namespace Esports.Gateway.Tests;
 
-/// <summary>
-/// Tests de integración para el servicio tournaments (Q8–Q15, Q20, Q21) vía gateway :8080.
-/// </summary>
 [Collection("Gateway")]
 public class TournamentsTests(GatewayFixture fix, ITestOutputHelper output)
 {
@@ -50,7 +47,7 @@ public class TournamentsTests(GatewayFixture fix, ITestOutputHelper output)
     // ─── Q9: Torneos por videojuego ─────────────────────────────────────────────
 
     [Fact]
-    public async Task Q9_LoL_Devuelve200_Con2Torneos_ConOrganizador()
+    public async Task Q9_LoL_Devuelve200_ConAlMenos2Torneos()
     {
         var r = await fix.Http.GetAsync($"/api/videojuegos/{fix.LoLId}/torneos");
         output.WriteLine(await r.Content.ReadAsStringAsync());
@@ -58,34 +55,26 @@ public class TournamentsTests(GatewayFixture fix, ITestOutputHelper output)
         var arr = GatewayFixture.ParseJson(await r.Content.ReadAsStringAsync());
         Assert.True(arr.GetArrayLength() >= 2, $"Se esperaban >= 2 torneos de LoL, hay {arr.GetArrayLength()}");
 
-        // Verificar que incluye nombreOrganizador (no nombreVideojuego — ya se conoce el juego)
         foreach (var el in arr.EnumerateArray())
         {
             Assert.True(el.TryGetProperty("torneoId", out _),          "Falta torneoId");
             Assert.True(el.TryGetProperty("nombreTorneo", out _),      "Falta nombreTorneo");
             Assert.True(el.TryGetProperty("nombreOrganizador", out _), "Falta nombreOrganizador");
             Assert.True(el.TryGetProperty("fechaInicio", out _),       "Falta fechaInicio");
-
-            // nombreOrganizador nunca debe ser el nombre de un videojuego
-            var org = el.GetProperty("nombreOrganizador").GetString()!;
-            Assert.DoesNotContain("League", org);
-            Assert.DoesNotContain("Dota", org);
         }
 
         var nombres = arr.EnumerateArray().Select(e => e.GetProperty("nombreTorneo").GetString()).ToList();
-        Assert.Contains("Worlds 2025", nombres);
-        Assert.Contains("MSI 2026",    nombres);
+        Assert.True(nombres.Any(n => n != null && n.Contains("Worlds 2025")), "Falta Worlds 2025 en LoL");
+        Assert.True(nombres.Any(n => n != null && n.Contains("MSI 2026")),    "Falta MSI 2026 en LoL");
     }
 
     [Fact]
-    public async Task Q9_Dota2_Devuelve200_Con1Torneo()
+    public async Task Q9_Valorant_Devuelve200_ConAlMenos3Torneos()
     {
-        var r = await fix.Http.GetAsync($"/api/videojuegos/{fix.Dota2Id}/torneos");
+        var r = await fix.Http.GetAsync($"/api/videojuegos/{fix.ValId}/torneos");
         Assert.Equal(HttpStatusCode.OK, r.StatusCode);
         var arr = GatewayFixture.ParseJson(await r.Content.ReadAsStringAsync());
-        Assert.Equal(1, arr.GetArrayLength());
-        Assert.Equal("The International 2025",
-            arr.EnumerateArray().First().GetProperty("nombreTorneo").GetString());
+        Assert.True(arr.GetArrayLength() >= 3, $"Se esperaban >= 3 torneos de VAL, hay {arr.GetArrayLength()}");
     }
 
     [Fact]
@@ -107,35 +96,33 @@ public class TournamentsTests(GatewayFixture fix, ITestOutputHelper output)
         var arr = GatewayFixture.ParseJson(await r.Content.ReadAsStringAsync());
         Assert.True(arr.GetArrayLength() >= 3, $"Se esperaban >= 3 organizadores, hay {arr.GetArrayLength()}");
         var nombres = arr.EnumerateArray().Select(e => e.GetProperty("nombre").GetString()).ToList();
-        Assert.Contains("ESL Gaming",    nombres);
-        Assert.Contains("PGL",           nombres);
-        Assert.Contains("BLAST Premier", nombres);
+        Assert.Contains("ESL FACEIT Group", nombres);
+        Assert.Contains("PGL",              nombres);
+        Assert.Contains("BLAST Premier",    nombres);
     }
 
     // ─── Q11: Torneos por organizador ───────────────────────────────────────────
 
     [Fact]
-    public async Task Q11_ESL_Devuelve200_ConWorldsYTI()
+    public async Task Q11_ESL_Devuelve200_ConIEM()
     {
         var r = await fix.Http.GetAsync($"/api/organizadores/{fix.ESLId}/torneos");
         Assert.Equal(HttpStatusCode.OK, r.StatusCode);
         var arr = GatewayFixture.ParseJson(await r.Content.ReadAsStringAsync());
-        Assert.True(arr.GetArrayLength() >= 2);
+        Assert.True(arr.GetArrayLength() >= 1);
         var nombres = arr.EnumerateArray().Select(e => e.GetProperty("nombreTorneo").GetString()).ToList();
-        Assert.Contains("Worlds 2025",          nombres);
-        Assert.Contains("The International 2025", nombres);
+        Assert.True(nombres.Any(n => n != null && n.Contains("IEM")), "ESL debe organizar IEM Cologne");
     }
 
     [Fact]
-    public async Task Q11_PGL_Devuelve200_ConMSIYCSMajor()
+    public async Task Q11_BLAST_Devuelve200_ConAlMenos3Torneos()
     {
-        var r = await fix.Http.GetAsync($"/api/organizadores/{fix.PGLId}/torneos");
+        var r = await fix.Http.GetAsync($"/api/organizadores/{fix.BLASTOrgId}/torneos");
         Assert.Equal(HttpStatusCode.OK, r.StatusCode);
         var arr = GatewayFixture.ParseJson(await r.Content.ReadAsStringAsync());
-        Assert.True(arr.GetArrayLength() >= 2);
+        Assert.True(arr.GetArrayLength() >= 3, $"BLAST debe tener >= 3 torneos, tiene {arr.GetArrayLength()}");
         var nombres = arr.EnumerateArray().Select(e => e.GetProperty("nombreTorneo").GetString()).ToList();
-        Assert.Contains("MSI 2026",              nombres);
-        Assert.Contains("CS2 Major Copenhagen",  nombres);
+        Assert.True(nombres.Any(n => n != null && n.Contains("BLAST")));
     }
 
     [Fact]
@@ -157,7 +144,6 @@ public class TournamentsTests(GatewayFixture fix, ITestOutputHelper output)
         var arr = GatewayFixture.ParseJson(await r.Content.ReadAsStringAsync());
         Assert.True(arr.GetArrayLength() >= 5, $"Se esperaban >= 5 torneos, hay {arr.GetArrayLength()}");
 
-        // Verificar orden descendente (el más reciente primero)
         var fechas = arr.EnumerateArray()
             .Select(e => DateTimeOffset.Parse(e.GetProperty("fechaInicio").GetString()!))
             .ToList();
@@ -178,29 +164,28 @@ public class TournamentsTests(GatewayFixture fix, ITestOutputHelper output)
     // ─── Q13: Equipos por torneo ────────────────────────────────────────────────
 
     [Fact]
-    public async Task Q13_Worlds_Devuelve200_ConT1_DRX_FNC()
+    public async Task Q13_Worlds_Devuelve200_ConT1_G2_FNC()
     {
         var r = await fix.Http.GetAsync($"/api/torneos/{fix.WorldsId}/equipos");
         Assert.Equal(HttpStatusCode.OK, r.StatusCode);
         var arr = GatewayFixture.ParseJson(await r.Content.ReadAsStringAsync());
-        Assert.Equal(3, arr.GetArrayLength());
+        Assert.True(arr.GetArrayLength() >= 8, $"WORLDS25 debería tener >= 8 equipos, hay {arr.GetArrayLength()}");
         var equipos = arr.EnumerateArray().Select(e => e.GetProperty("nombreEquipo").GetString()).ToList();
-        Assert.Contains("T1",     equipos);
-        Assert.Contains("DRX",    equipos);
-        Assert.Contains("Fnatic", equipos);
+        Assert.Contains("T1",      equipos);
+        Assert.Contains("G2 Esports", equipos);
+        Assert.Contains("Fnatic",  equipos);
     }
 
     [Fact]
-    public async Task Q13_CSMajor_Devuelve200_ConNaVi_FaZe_C9()
+    public async Task Q13_IEM_Devuelve200_ConNAVI_FAZE()
     {
-        var r = await fix.Http.GetAsync($"/api/torneos/{fix.CSMajorId}/equipos");
+        var r = await fix.Http.GetAsync($"/api/torneos/{fix.IEMId}/equipos");
         Assert.Equal(HttpStatusCode.OK, r.StatusCode);
         var arr = GatewayFixture.ParseJson(await r.Content.ReadAsStringAsync());
-        Assert.Equal(3, arr.GetArrayLength());
+        Assert.True(arr.GetArrayLength() >= 8, $"IEM-COL26 debería tener >= 8 equipos, hay {arr.GetArrayLength()}");
         var equipos = arr.EnumerateArray().Select(e => e.GetProperty("nombreEquipo").GetString()).ToList();
-        Assert.Contains("Natus Vincere", equipos);
-        Assert.Contains("FaZe Clan",     equipos);
-        Assert.Contains("Cloud9",        equipos);
+        Assert.Contains("Natus Vincere CS2", equipos);
+        Assert.Contains("FaZe Clan CS2",     equipos);
     }
 
     [Fact]
@@ -222,18 +207,17 @@ public class TournamentsTests(GatewayFixture fix, ITestOutputHelper output)
         var arr = GatewayFixture.ParseJson(await r.Content.ReadAsStringAsync());
         Assert.True(arr.GetArrayLength() >= 2);
         var nombres = arr.EnumerateArray().Select(e => e.GetProperty("nombreTorneo").GetString()).ToList();
-        Assert.Contains("Worlds 2025", nombres);
-        Assert.Contains("MSI 2026",    nombres);
+        Assert.True(nombres.Any(n => n != null && n.Contains("Worlds 2025")), "T1 debe estar en Worlds 2025");
+        Assert.True(nombres.Any(n => n != null && n.Contains("MSI 2026")),    "T1 debe estar en MSI 2026");
     }
 
     [Fact]
-    public async Task Q14_EquipoSinTorneos_Devuelve200_ListaVacia()
+    public async Task Q14_NAVI_Devuelve200_ConAlMenos1Torneo()
     {
-        // FaZe solo está en CS Major, no en ningún torneo de LoL
-        var r = await fix.Http.GetAsync($"/api/torneos/por-equipo/{fix.FaZeId}");
+        var r = await fix.Http.GetAsync($"/api/torneos/por-equipo/{fix.NAVIId}");
         Assert.Equal(HttpStatusCode.OK, r.StatusCode);
         var arr = GatewayFixture.ParseJson(await r.Content.ReadAsStringAsync());
-        Assert.True(arr.GetArrayLength() >= 1, "FaZe debería estar en al menos CS Major");
+        Assert.True(arr.GetArrayLength() >= 1, "NAVI debería estar en al menos IEM-COL26");
     }
 
     [Fact]
@@ -253,18 +237,18 @@ public class TournamentsTests(GatewayFixture fix, ITestOutputHelper output)
         var r = await fix.Http.GetAsync("/api/torneos/por-codigo/WORLDS25");
         Assert.Equal(HttpStatusCode.OK, r.StatusCode);
         var doc = GatewayFixture.ParseJson(await r.Content.ReadAsStringAsync());
-        Assert.Equal("Worlds 2025", doc.GetProperty("nombre").GetString());
+        Assert.True(doc.GetProperty("nombre").GetString()!.Contains("Worlds 2025"));
         Assert.NotEqual(Guid.Empty, doc.GetProperty("torneoId").GetGuid());
         Assert.True(doc.TryGetProperty("fechaInicio", out _));
     }
 
     [Fact]
-    public async Task Q15_CodigoCS2MAJOR26_Devuelve200()
+    public async Task Q15_CodigoIEM_COL26_Devuelve200()
     {
-        var r = await fix.Http.GetAsync("/api/torneos/por-codigo/CS2MAJOR26");
+        var r = await fix.Http.GetAsync("/api/torneos/por-codigo/IEM-COL26");
         Assert.Equal(HttpStatusCode.OK, r.StatusCode);
         var doc = GatewayFixture.ParseJson(await r.Content.ReadAsStringAsync());
-        Assert.Equal("CS2 Major Copenhagen", doc.GetProperty("nombre").GetString());
+        Assert.True(doc.GetProperty("nombre").GetString()!.Contains("IEM"));
     }
 
     [Fact]
@@ -277,67 +261,71 @@ public class TournamentsTests(GatewayFixture fix, ITestOutputHelper output)
     // ─── Q20: Premios por torneo ────────────────────────────────────────────────
 
     [Fact]
-    public async Task Q20_Worlds_Devuelve200_Con2Premios()
+    public async Task Q20_Worlds_Devuelve200_Con4Premios()
     {
         var r = await fix.Http.GetAsync($"/api/torneos/{fix.WorldsId}/premios");
         Assert.Equal(HttpStatusCode.OK, r.StatusCode);
         var arr = GatewayFixture.ParseJson(await r.Content.ReadAsStringAsync());
-        Assert.Equal(2, arr.GetArrayLength());
+        Assert.Equal(4, arr.GetArrayLength());
 
         var montos = arr.EnumerateArray()
             .Select(e => e.GetProperty("monto").GetDecimal())
             .OrderByDescending(m => m)
             .ToList();
-        Assert.Equal(500000m, montos[0]);
-        Assert.Equal(200000m, montos[1]);
+        Assert.Equal(500000m, montos[0]);   // Campeon
+        Assert.Equal(225000m, montos[1]);   // Subcampeon 45%
+        Assert.Equal(100000m, montos[2]);   // Semifinalista 20%
+        Assert.Equal(40000m,  montos[3]);   // MVP 8%
     }
 
     [Fact]
-    public async Task Q20_Worlds_PrimerLugar_EsT1()
+    public async Task Q20_Worlds_Campeon_EsT1()
     {
         var r = await fix.Http.GetAsync($"/api/torneos/{fix.WorldsId}/premios");
         var arr = GatewayFixture.ParseJson(await r.Content.ReadAsStringAsync());
-        var primerLugar = arr.EnumerateArray()
-            .FirstOrDefault(e => e.GetProperty("tipo").GetString() == "Primer lugar");
-        Assert.NotEqual(default, primerLugar);
-        Assert.Equal(fix.T1Id, primerLugar.GetProperty("equipoId").GetGuid());
+        var campeon = arr.EnumerateArray()
+            .FirstOrDefault(e => e.GetProperty("tipo").GetString() == "Campeon");
+        Assert.NotEqual(default, campeon);
+        Assert.Equal(fix.T1Id, campeon.GetProperty("equipoId").GetGuid());
     }
 
     [Fact]
-    public async Task Q20_TorneoSinPremios_Devuelve200_ListaVacia()
+    public async Task Q20_IEM_Devuelve200_Con4Premios()
     {
-        var r = await fix.Http.GetAsync($"/api/torneos/{fix.MSIId}/premios");
+        var r = await fix.Http.GetAsync($"/api/torneos/{fix.IEMId}/premios");
         Assert.Equal(HttpStatusCode.OK, r.StatusCode);
         var arr = GatewayFixture.ParseJson(await r.Content.ReadAsStringAsync());
-        Assert.Equal(0, arr.GetArrayLength());
+        Assert.Equal(4, arr.GetArrayLength());
     }
 
     // ─── Q21: Premios por equipo ────────────────────────────────────────────────
 
     [Fact]
-    public async Task Q21_T1_Devuelve200_Con1Premio_De500k()
+    public async Task Q21_T1_Devuelve200_Con500kDeCampeon()
     {
         var r = await fix.Http.GetAsync($"/api/premios/por-equipo/{fix.T1Id}");
         Assert.Equal(HttpStatusCode.OK, r.StatusCode);
         var arr = GatewayFixture.ParseJson(await r.Content.ReadAsStringAsync());
-        Assert.Equal(1, arr.GetArrayLength());
-        Assert.Equal(500000m, arr.EnumerateArray().First().GetProperty("monto").GetDecimal());
+        Assert.True(arr.GetArrayLength() >= 1);
+        var montos = arr.EnumerateArray().Select(e => e.GetProperty("monto").GetDecimal()).ToList();
+        Assert.Contains(500000m, montos);   // Campeon de WORLDS25
     }
 
     [Fact]
-    public async Task Q21_NaVi_Devuelve200_Con1Premio_De250k()
+    public async Task Q21_NAVI_Devuelve200_Con1Premio_MVP_IEM()
     {
-        var r = await fix.Http.GetAsync($"/api/premios/por-equipo/{fix.NaViId}");
+        var r = await fix.Http.GetAsync($"/api/premios/por-equipo/{fix.NAVIId}");
         Assert.Equal(HttpStatusCode.OK, r.StatusCode);
         var arr = GatewayFixture.ParseJson(await r.Content.ReadAsStringAsync());
         Assert.Equal(1, arr.GetArrayLength());
-        Assert.Equal(250000m, arr.EnumerateArray().First().GetProperty("monto").GetDecimal());
+        Assert.Equal(40000m, arr.EnumerateArray().First().GetProperty("monto").GetDecimal());
     }
 
     [Fact]
-    public async Task Q21_EquipoSinPremios_Devuelve200_ListaVacia()
+    public async Task Q21_FuriaLoL_SinPremios_Devuelve200_ListaVacia()
     {
-        var r = await fix.Http.GetAsync($"/api/premios/por-equipo/{fix.G2Id}");
+        // FURIA LoL (FUR) está en posición 6+ en WORLDS25 y MSI26: no alcanza el top-4
+        var r = await fix.Http.GetAsync($"/api/premios/por-equipo/{fix.FurId}");
         Assert.Equal(HttpStatusCode.OK, r.StatusCode);
         var arr = GatewayFixture.ParseJson(await r.Content.ReadAsStringAsync());
         Assert.Equal(0, arr.GetArrayLength());

@@ -5,6 +5,10 @@ VisualStudioVersion = 17.0.0.0
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Esports.Shared", "shared\Esports.Shared\Esports.Shared.csproj", "{A1B2C3D4-E5F6-7890-ABCD-EF1234567890}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Esports.Auth.Shared", "shared\Esports.Auth.Shared\Esports.Auth.Shared.csproj", "{C9D0E1F2-A3B4-5678-2345-678901234568}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Esports.Auth.Api", "services\auth\Esports.Auth.Api\Esports.Auth.Api.csproj", "{D0E1F2A3-B4C5-6789-3456-789012345679}"
+EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Esports.Teams.Api", "services\teams\Esports.Teams.Api\Esports.Teams.Api.csproj", "{B2C3D4E5-F6A7-8901-BCDE-F01234567891}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Esports.Tournaments.Api", "services\tournaments\Esports.Tournaments.Api\Esports.Tournaments.Api.csproj", "{C3D4E5F6-A7B8-9012-CDEF-012345678912}"
@@ -29,6 +33,14 @@ Global
     {A1B2C3D4-E5F6-7890-ABCD-EF1234567890}.Debug|Any CPU.Build.0 = Debug|Any CPU
     {A1B2C3D4-E5F6-7890-ABCD-EF1234567890}.Release|Any CPU.ActiveCfg = Release|Any CPU
     {A1B2C3D4-E5F6-7890-ABCD-EF1234567890}.Release|Any CPU.Build.0 = Release|Any CPU
+    {C9D0E1F2-A3B4-5678-2345-678901234568}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+    {C9D0E1F2-A3B4-5678-2345-678901234568}.Debug|Any CPU.Build.0 = Debug|Any CPU
+    {C9D0E1F2-A3B4-5678-2345-678901234568}.Release|Any CPU.ActiveCfg = Release|Any CPU
+    {C9D0E1F2-A3B4-5678-2345-678901234568}.Release|Any CPU.Build.0 = Release|Any CPU
+    {D0E1F2A3-B4C5-6789-3456-789012345679}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+    {D0E1F2A3-B4C5-6789-3456-789012345679}.Debug|Any CPU.Build.0 = Debug|Any CPU
+    {D0E1F2A3-B4C5-6789-3456-789012345679}.Release|Any CPU.ActiveCfg = Release|Any CPU
+    {D0E1F2A3-B4C5-6789-3456-789012345679}.Release|Any CPU.Build.0 = Release|Any CPU
     {B2C3D4E5-F6A7-8901-BCDE-F01234567891}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
     {B2C3D4E5-F6A7-8901-BCDE-F01234567891}.Debug|Any CPU.Build.0 = Debug|Any CPU
     {B2C3D4E5-F6A7-8901-BCDE-F01234567891}.Release|Any CPU.ActiveCfg = Release|Any CPU

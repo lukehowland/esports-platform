@@ -29,18 +29,27 @@ public class PartidaService : IPartidaService
 
     public async Task<PartidaResponse> RegistrarAsync(RegistrarPartidaRequest req)
     {
+        if (req.EquipoLocalId == Guid.Empty || req.EquipoVisitanteId == Guid.Empty || req.EquipoGanadorId == Guid.Empty)
+            throw new ArgumentException("Los ids de equipos no pueden ser vacios.");
+
+        if (req.EquipoLocalId == req.EquipoVisitanteId)
+            throw new ArgumentException("El equipo local y el visitante deben ser distintos.");
+
+        if (req.EquipoGanadorId != req.EquipoLocalId && req.EquipoGanadorId != req.EquipoVisitanteId)
+            throw new ArgumentException("El ganador debe ser el equipo local o el equipo visitante.");
+
         var p = new Partida
         {
             PartidaId = Guid.NewGuid(),
             TorneoId = req.TorneoId,
-            NombreTorneo = req.NombreTorneo,
+            NombreTorneo = req.NombreTorneo.Trim(),
             Fecha = req.Fecha,
             EquipoLocalId = req.EquipoLocalId,
             EquipoVisitanteId = req.EquipoVisitanteId,
-            NombreLocal = req.NombreLocal,
-            NombreVisitante = req.NombreVisitante,
+            NombreLocal = req.NombreLocal.Trim(),
+            NombreVisitante = req.NombreVisitante.Trim(),
             EquipoGanadorId = req.EquipoGanadorId,
-            Resultado = req.Resultado
+            Resultado = req.Resultado.Trim()
         };
 
         await _repo.RegistrarAsync(p);

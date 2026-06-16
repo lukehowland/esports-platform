@@ -1,6 +1,6 @@
 # 07 — Plan de Ejecución (para Claude Code)
 
-> **Objetivo:** backend completo (4 microservicios + gateway, Cassandra, RabbitMQ, todo en Docker) que cubra las 24 queries y quede listo para que el frontend lo consuma. **Deadline: miércoles.** Este doc es la secuencia de fases que vas a ejecutar con agentes de Claude Code. Cada fase tiene objetivo, tareas, archivos, criterio de aceptación y un prompt sugerido.
+> **Objetivo:** backend completo (5 microservicios + gateway, Cassandra, RabbitMQ, todo en Docker) que cubra las 24 queries, autenticación demo con JWT y quede listo para que el frontend lo consuma. **Deadline: miércoles.** Este doc es la secuencia de fases que vas a ejecutar con agentes de Claude Code. Cada fase tiene objetivo, tareas, archivos, criterio de aceptación y un prompt sugerido.
 
 ## Cómo orquestar los agentes
 
@@ -115,50 +115,70 @@
 
 ---
 
-## Fase 5 — API Gateway (YARP)
+## Fase 5 — auth (JWT demo + autorización real)
 
-**Objetivo:** una sola URL pública (`:8080`) que rutea a los 4 servicios.
+**Objetivo:** reemplazar roles solo-frontend por identidad backend verificable y ownership real en mutaciones.
+
+**Tareas:**
+1. Crear `shared/Esports.Auth.Shared` con roles, claims, helpers de `ClaimsPrincipal` y `AddEsportsJwtAuth`.
+2. Crear `services/auth/Esports.Auth.Api`: keyspace `esports_auth`, tabla `usuarios`, PBKDF2, login, register admin-only y `/api/auth/me`.
+3. Agregar `auth` al compose (`5005:8080`) y ruta YARP `/api/auth/**`.
+4. Proteger mutaciones en `teams`, `tournaments` y `matches`; mantener lecturas públicas.
+5. Adaptar seeder: login admin, Bearer en todos los POSTs y registro de usuarios demo por rol.
+6. Adaptar tests: login admin en fixture, POSTs de error autenticados, tests explícitos 401/403.
+
+**Criterio de aceptación:**
+- `docker compose up --build -d` deja `auth` healthy y seeder `Exited (0)`.
+- Login admin/organizador/capitán/fan devuelve token.
+- Mutación sin token devuelve `401`; rol/ownership incorrecto devuelve `403`.
+- Suite de integración pasa completa.
+
+---
+
+## Fase 6 — API Gateway (YARP)
+
+**Objetivo:** una sola URL pública (`:8080`) que rutea a los 5 servicios.
 
 **Tareas:**
 1. `Esports.Gateway` (ASP.NET Core), paquete `Yarp.ReverseProxy`.
-2. Rutas y clusters en `appsettings.json` según la tabla de **ruteo por primer segmento** de docs/04 (10 prefijos → 4 servicios). Sin solapamientos porque cada `/api/<recurso>` mapea a un solo servicio.
-3. Dockerfile + servicio `gateway` en compose (8080:8080, `depends_on` los 4).
+2. Rutas y clusters en `appsettings.json` según la tabla de **ruteo por primer segmento** de docs/04 (incluye `/api/auth/**`). Sin solapamientos porque cada `/api/<recurso>` mapea a un solo servicio.
+3. Dockerfile + servicio `gateway` en compose (8080:8080, `depends_on` los 5 servicios).
 
 **Criterio de aceptación:** las 24 queries (Q1–Q24) funcionan pegando **solo** a `http://localhost:8080`.
 
 **Prompt sugerido:**
-> Leé CLAUDE.md y docs/04. Implementá `gateway` con Yarp.ReverseProxy, configurando rutas y clusters por appsettings.json según la tabla de ruteo por primer segmento de docs/04 (/api/jugadores y /api/equipos→teams; /api/videojuegos, /api/organizadores, /api/torneos, /api/inscripciones, /api/premios→tournaments; /api/partidas→matches; /api/ranking y /api/stats→ranking). Dockerfile + compose (8080:8080). Verificá que Q1–Q24 responden vía http://localhost:8080.
+> Leé CLAUDE.md y docs/04. Implementá `gateway` con Yarp.ReverseProxy, configurando rutas y clusters por appsettings.json según la tabla de ruteo por primer segmento de docs/04 (/api/jugadores y /api/equipos→teams; /api/videojuegos, /api/organizadores, /api/torneos, /api/inscripciones, /api/premios→tournaments; /api/partidas→matches; /api/ranking y /api/stats→ranking; /api/auth→auth). Dockerfile + compose (8080:8080). Verificá que Q1–Q24 y auth respondan vía http://localhost:8080.
 
 ---
 
-## Fase 6 — Seed data + README + Swagger pulido
+## Fase 7 — Seed data + README + Swagger pulido
 
 **Objetivo:** datos de ejemplo para el frontend y documentación de arranque.
 
 **Tareas:**
-1. `tools/Esports.Seeder` (consola o script) que, vía el gateway, cargue: ~4 videojuegos (varios géneros), ~3 organizadores, ~8 equipos con jugadores de distintos países (varios por equipo), ~5 torneos, inscripciones cruzadas, premios y ~15 partidas con ganadores. Idempotente o "reset-friendly".
-2. Correrlo cross-platform: `docker compose run --rm seeder` o `dotnet run` documentado.
+1. `tools/Esports.Seeder` (consola o script) que, vía el gateway, cargue datos realistas y conectados: videojuegos, organizadores, equipos con jugadores de distintos países, torneos, inscripciones cruzadas, premios y partidas con ganadores. Idempotente y "reset-friendly".
+2. Correrlo automaticamente dentro de `docker compose up --build` para que no existan pasos manuales antes de usar el frontend.
 3. `README.md`: requisitos, cómo levantar en Mac y Windows, URLs, cómo correr el seeder, link a docs/04.
 
-**Criterio de aceptación:** tras `docker compose up` + seeder, las 24 queries devuelven datos no vacíos vía el gateway; un compañero en Windows levanta el proyecto siguiendo el README.
+**Criterio de aceptación:** tras `docker compose up --build`, las 24 queries devuelven datos no vacíos vía el gateway; un compañero en Windows levanta el proyecto siguiendo el README.
 
 **Prompt sugerido:**
-> Leé CLAUDE.md y docs. Creá `tools/Esports.Seeder` que cargue datos realistas vía el gateway (videojuegos de varios géneros, organizadores, equipos con jugadores de varios países, torneos, inscripciones, premios, partidas con ganadores) cubriendo las 24 queries. Cross-platform (`docker compose run`). Escribí el README con pasos para Mac y Windows, URLs y endpoints. Verificá que tras seedear, Q1–Q24 traen datos.
+> Leé CLAUDE.md y docs. Creá `tools/Esports.Seeder` que cargue datos realistas vía el gateway (videojuegos de varios géneros, organizadores, equipos con jugadores de varios países, torneos, inscripciones, premios, partidas con ganadores) cubriendo las 24 queries. Integralo al flujo normal de `docker compose up --build`. Escribí el README con pasos para Mac y Windows, URLs y endpoints. Verificá que Q1–Q24 traen datos.
 
 ---
 
-## Fase 7 — Smoke test end-to-end + push final
+## Fase 8 — Smoke test end-to-end + push final
 
 **Objetivo:** todo verde y en GitHub.
 
 **Tareas:**
-1. `docker compose down -v` + `docker compose up --build` desde cero → arranque limpio sin pasos manuales.
+1. `docker compose down` + `docker compose up --build` desde cero → arranque limpio, repoblado y sin pasos manuales.
 2. Recorrer la checklist de Definition of Done (`CLAUDE.md §7`).
 3. Probar las 24 queries vía gateway + los dos flujos de evento.
 4. Commit + push a GitHub (`LukeHowland`).
 
 **Prompt sugerido:**
-> Leé CLAUDE.md §7. Reset limpio (`docker compose down -v` y `up --build`), recorré la Definition of Done, probá las 24 queries vía el gateway y los dos flujos de evento, arreglá lo que falle, y dejá todo commiteado para push.
+> Leé CLAUDE.md §7. Reset limpio (`docker compose down` y `docker compose up --build`), recorré la Definition of Done, probá las 24 queries vía el gateway y los dos flujos de evento, arreglá lo que falle, y dejá todo commiteado para push.
 
 ---
 
@@ -166,9 +186,9 @@
 
 Cuando termine la Fase 6, pasales:
 - **URL base:** `http://localhost:8080` (todo cuelga de acá).
-- **Swagger por servicio:** `:5001`–`:5004/swagger`.
+- **Swagger por servicio:** `:5001`–`:5005/swagger`.
 - **`docs/04-contratos-api.md`** (los 24 endpoints con shapes).
-- **Arranque:** `docker compose up --build` + correr el seeder.
+- **Arranque:** `docker compose up --build` deja el stack levantado y poblado.
 - Recordá que rankings y stats son eventualmente consistentes (pueden tardar un instante tras una inscripción o partida).
 
 ## Orden de prioridad si el tiempo aprieta

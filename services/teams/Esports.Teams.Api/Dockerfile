@@ -3,6 +3,7 @@ WORKDIR /src
 
 # Copiar solo los .csproj primero para cachear el restore
 COPY shared/Esports.Shared/Esports.Shared.csproj shared/Esports.Shared/
+COPY shared/Esports.Auth.Shared/Esports.Auth.Shared.csproj shared/Esports.Auth.Shared/
 COPY services/teams/Esports.Teams.Api/Esports.Teams.Api.csproj services/teams/Esports.Teams.Api/
 
 RUN dotnet restore services/teams/Esports.Teams.Api/Esports.Teams.Api.csproj

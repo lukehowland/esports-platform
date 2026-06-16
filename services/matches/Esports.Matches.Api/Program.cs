@@ -1,4 +1,6 @@
+using Esports.Auth.Shared;
 using Esports.Matches.Api.Cassandra;
+using Esports.Matches.Api.Clients;
 using Esports.Matches.Api.Repositories;
 using Esports.Matches.Api.Services;
 using MassTransit;
@@ -17,6 +19,13 @@ builder.Services.AddSingleton<IPartidaRepository, PartidaRepository>();
 
 // Services
 builder.Services.AddScoped<IPartidaService, PartidaService>();
+
+// HTTP client tipado para tournaments (verifica owner del torneo al registrar partida)
+builder.Services.AddHttpClient<TournamentsClient>(c =>
+    c.BaseAddress = new Uri(config["Services:Tournaments"] ?? "http://tournaments:8080"));
+
+// JWT (valida tokens emitidos por el servicio auth)
+builder.Services.AddEsportsJwtAuth(builder.Configuration);
 
 // MassTransit: publisher de MatchPlayed
 builder.Services.AddMassTransit(x =>
@@ -42,6 +51,9 @@ if (app.Environment.IsDevelopment() || app.Environment.IsProduction())
     app.UseSwagger();
     app.UseSwaggerUI();
 }
+
+app.UseAuthentication();
+app.UseAuthorization();
 
 app.MapControllers();
 app.MapHealthChecks("/health");

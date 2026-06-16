@@ -14,6 +14,7 @@
 
   <ItemGroup>
     <ProjectReference Include="../../../shared/Esports.Shared/Esports.Shared.csproj" />
+    <ProjectReference Include="../../../shared/Esports.Auth.Shared/Esports.Auth.Shared.csproj" />
   </ItemGroup>
 
 </Project>

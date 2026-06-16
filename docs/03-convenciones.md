@@ -34,10 +34,12 @@ Esports.Teams.Api          (.Controllers, .Domain, .Repositories, .Services, .Dt
 Esports.Tournaments.Api    (..., .Events)          # publica eventos
 Esports.Matches.Api        (..., .Events)          # publica eventos
 Esports.Ranking.Api        (..., .Consumers)       # consume eventos
+Esports.Auth.Api           (.Controllers, .Domain, .Repositories, .Services, .Dtos, .Cassandra)
 
 Esports.Gateway
 Esports.Shared             // contratos de eventos + DTOs compartidos
 Esports.Shared.Events      // los records de eventos (TeamRegisteredToTournament, MatchPlayed)
+Esports.Auth.Shared        // roles, claims y configuración JWT compartida
 ```
 
 ## Estructura de carpetas por servicio
@@ -70,6 +72,7 @@ Por servicio:
 - `tournaments` agrega `Events/` (publisher de `TeamRegisteredToTournament`). Es el más grande: dominios de videojuegos, organizadores, torneos, inscripciones y premios — agrupar los controllers/repos por sub-dominio (`VideojuegosController`, `OrganizadoresController`, `TorneosController`, `InscripcionesController`, `PremiosController`).
 - `matches` agrega `Events/` (publisher de `MatchPlayed`).
 - `ranking` agrega `Consumers/` (consume ambos eventos). Sus "repositories" escriben los counters y leen los read-models.
+- `auth` sigue el patrón de un servicio API normal, pero su dominio es `Usuario`; persiste en `esports_auth`, emite JWT y no publica eventos.
 
 ## Convenciones de código
 
@@ -96,6 +99,26 @@ Cada servicio lee config de `appsettings.json` + variables de entorno (las de en
 ```
 
 En Docker se sobreescriben con `Cassandra__ContactPoints=cassandra`, `RabbitMq__Host=rabbitmq`, `Services__Teams=http://teams:8080`, etc. (nombres de servicio de la red de Docker, no `localhost`).
+
+Configuración de auth/JWT:
+
+```json
+{
+  "Jwt": { "Secret": "dev-secret", "Issuer": "esports-auth", "Audience": "esports-platform", "ExpiresHours": 8 },
+  "Auth": { "AdminUser": "admin", "AdminPassword": "admin-dev-password" }
+}
+```
+
+En Docker: `Jwt__Secret`, `Jwt__Issuer`, `Jwt__Audience`, `Jwt__ExpiresHours`, `Auth__AdminUser`, `Auth__AdminPassword`. El secret de dev vive solo en `docker-compose.yml`; no usar valores productivos ni subir secretos reales.
+
+Roles y claims canónicos en `Esports.Auth.Shared.AuthConstants`:
+
+| Rol | Claim relevante |
+|---|---|
+| `admin` | puede todo |
+| `organizador` | `organizador_id` |
+| `capitan` | `equipo_id` |
+| `fan` | solo lectura |
 
 ## Git
 

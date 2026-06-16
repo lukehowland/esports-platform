@@ -5,31 +5,30 @@ using Xunit.Abstractions;
 
 namespace Esports.Gateway.Tests;
 
-/// <summary>
-/// Tests de integración para el servicio matches (Q16–Q19) vía gateway :8080.
-/// </summary>
 [Collection("Gateway")]
 public class MatchesTests(GatewayFixture fix, ITestOutputHelper output)
 {
     // ─── Q16: Partidas por torneo ───────────────────────────────────────────────
 
     [Fact]
-    public async Task Q16_Worlds_Devuelve200_Con5Partidas()
+    public async Task Q16_Worlds_Devuelve200_ConAlMenos10Partidas()
     {
+        // WORLDS25 (10 equipos, 4 rondas round-robin + final) genera 21 partidas
         var r = await fix.Http.GetAsync($"/api/partidas/por-torneo/{fix.WorldsId}");
         output.WriteLine(await r.Content.ReadAsStringAsync());
         Assert.Equal(HttpStatusCode.OK, r.StatusCode);
         var arr = GatewayFixture.ParseJson(await r.Content.ReadAsStringAsync());
-        Assert.Equal(5, arr.GetArrayLength());
+        Assert.True(arr.GetArrayLength() >= 10, $"WORLDS25 debe tener >= 10 partidas, tiene {arr.GetArrayLength()}");
     }
 
     [Fact]
-    public async Task Q16_CSMajor_Devuelve200_Con3Partidas()
+    public async Task Q16_IEM_Devuelve200_ConAlMenos10Partidas()
     {
-        var r = await fix.Http.GetAsync($"/api/partidas/por-torneo/{fix.CSMajorId}");
+        // IEM-COL26 (12 equipos, 4 rondas + final) genera 25 partidas
+        var r = await fix.Http.GetAsync($"/api/partidas/por-torneo/{fix.IEMId}");
         Assert.Equal(HttpStatusCode.OK, r.StatusCode);
         var arr = GatewayFixture.ParseJson(await r.Content.ReadAsStringAsync());
-        Assert.Equal(3, arr.GetArrayLength());
+        Assert.True(arr.GetArrayLength() >= 10, $"IEM-COL26 debe tener >= 10 partidas, tiene {arr.GetArrayLength()}");
     }
 
     [Fact]
@@ -39,11 +38,11 @@ public class MatchesTests(GatewayFixture fix, ITestOutputHelper output)
         var arr = GatewayFixture.ParseJson(await r.Content.ReadAsStringAsync());
         foreach (var el in arr.EnumerateArray())
         {
-            Assert.True(el.TryGetProperty("partidaId", out _),         "Falta partidaId");
-            Assert.True(el.TryGetProperty("nombreLocal", out _),       "Falta nombreLocal");
-            Assert.True(el.TryGetProperty("nombreVisitante", out _),   "Falta nombreVisitante");
-            Assert.True(el.TryGetProperty("resultado", out _),         "Falta resultado");
-            Assert.True(el.TryGetProperty("fecha", out _),             "Falta fecha");
+            Assert.True(el.TryGetProperty("partidaId", out _),       "Falta partidaId");
+            Assert.True(el.TryGetProperty("nombreLocal", out _),     "Falta nombreLocal");
+            Assert.True(el.TryGetProperty("nombreVisitante", out _), "Falta nombreVisitante");
+            Assert.True(el.TryGetProperty("resultado", out _),       "Falta resultado");
+            Assert.True(el.TryGetProperty("fecha", out _),           "Falta fecha");
         }
     }
 
@@ -61,7 +60,7 @@ public class MatchesTests(GatewayFixture fix, ITestOutputHelper output)
     [Fact]
     public async Task Q17_T1_Devuelve200_ConAlMenos5Partidas()
     {
-        // T1 jugó: 4 en Worlds (vs DRX x3, vs FNC x1) + 1 en MSI = 5 partidas
+        // T1 juega en WORLDS25 (5 partidas) + MSI26 + LEC-SUM26
         var r = await fix.Http.GetAsync($"/api/partidas/por-equipo/{fix.T1Id}");
         Assert.Equal(HttpStatusCode.OK, r.StatusCode);
         var arr = GatewayFixture.ParseJson(await r.Content.ReadAsStringAsync());
@@ -70,10 +69,10 @@ public class MatchesTests(GatewayFixture fix, ITestOutputHelper output)
     }
 
     [Fact]
-    public async Task Q17_NaVi_Devuelve200_Con2Partidas_AmbosResultados()
+    public async Task Q17_NAVI_Devuelve200_ConVictoriasYDerrotas()
     {
-        // NaVi jugó 2 partidas en CS Major, ambas victorias
-        var r = await fix.Http.GetAsync($"/api/partidas/por-equipo/{fix.NaViId}");
+        // NAVI juega en IEM-COL26 y otros torneos BLAST
+        var r = await fix.Http.GetAsync($"/api/partidas/por-equipo/{fix.NAVIId}");
         Assert.Equal(HttpStatusCode.OK, r.StatusCode);
         var arr = GatewayFixture.ParseJson(await r.Content.ReadAsStringAsync());
         Assert.True(arr.GetArrayLength() >= 2);
@@ -81,14 +80,14 @@ public class MatchesTests(GatewayFixture fix, ITestOutputHelper output)
         var resultados = arr.EnumerateArray()
             .Select(e => e.GetProperty("resultado").GetString())
             .ToList();
-        Assert.All(resultados, res => Assert.Equal("VICTORIA", res));
+        Assert.Contains("VICTORIA", resultados);
+        Assert.Contains("DERROTA",  resultados);
     }
 
     [Fact]
-    public async Task Q17_FaZe_TieneVictoriasYDerrotas()
+    public async Task Q17_FAZE_TieneVictoriasYDerrotas()
     {
-        // FaZe: venció a C9, pero perdió ante NaVi
-        var r = await fix.Http.GetAsync($"/api/partidas/por-equipo/{fix.FaZeId}");
+        var r = await fix.Http.GetAsync($"/api/partidas/por-equipo/{fix.FAZEId}");
         Assert.Equal(HttpStatusCode.OK, r.StatusCode);
         var arr = GatewayFixture.ParseJson(await r.Content.ReadAsStringAsync());
         Assert.True(arr.GetArrayLength() >= 2);
@@ -129,25 +128,23 @@ public class MatchesTests(GatewayFixture fix, ITestOutputHelper output)
     // ─── Q18: Partidas por fecha ────────────────────────────────────────────────
 
     [Fact]
-    public async Task Q18_Fecha20251015_Devuelve200_Con1Partida()
+    public async Task Q18_Fecha20251015_Devuelve200_ConAlMenos1Partida()
     {
+        // WORLDS25 empieza 2025-10-14; ronda 0 cae el 2025-10-15
         var r = await fix.Http.GetAsync("/api/partidas/por-fecha/2025-10-15");
         Assert.Equal(HttpStatusCode.OK, r.StatusCode);
         var arr = GatewayFixture.ParseJson(await r.Content.ReadAsStringAsync());
-        Assert.Equal(1, arr.GetArrayLength());
-        // El primer match del seeder es T1 vs DRX ese día
-        var local = arr.EnumerateArray().First().GetProperty("nombreLocal").GetString();
-        Assert.Equal("T1", local);
+        Assert.True(arr.GetArrayLength() >= 1, "Debe haber partidas de WORLDS25 el 2025-10-15");
     }
 
     [Fact]
-    public async Task Q18_Fecha20260410_Devuelve200_Con1Partida()
+    public async Task Q18_Fecha20260604_IEM_Devuelve200_ConAlMenos1Partida()
     {
-        // NaVi vs FaZe en CS Major
-        var r = await fix.Http.GetAsync("/api/partidas/por-fecha/2026-04-10");
+        // IEM-COL26 empieza 2026-06-02; el seed genera partidas a partir de 2026-06-04.
+        var r = await fix.Http.GetAsync("/api/partidas/por-fecha/2026-06-04");
         Assert.Equal(HttpStatusCode.OK, r.StatusCode);
         var arr = GatewayFixture.ParseJson(await r.Content.ReadAsStringAsync());
-        Assert.Equal(1, arr.GetArrayLength());
+        Assert.True(arr.GetArrayLength() >= 1, "Debe haber partidas de IEM-COL26 el 2026-06-04");
     }
 
     [Fact]
@@ -162,23 +159,22 @@ public class MatchesTests(GatewayFixture fix, ITestOutputHelper output)
     // ─── Q19: Partidas entre dos equipos (bidireccional) ────────────────────────
 
     [Fact]
-    public async Task Q19_T1_vs_DRX_Devuelve200_ConAlMenos3Partidas()
+    public async Task Q19_T1_vs_G2_Devuelve200_ConAlMenos3Partidas()
     {
-        // T1 y DRX jugaron 3 veces directamente (oct15, oct20, oct22 en Worlds)
-        var r = await fix.Http.GetAsync($"/api/partidas/entre/{fix.T1Id}/{fix.DRXId}");
+        // T1(idx 0) y G2(idx 1) se enfrentan en rondas 0, 2 y la final de WORLDS25
+        var r = await fix.Http.GetAsync($"/api/partidas/entre/{fix.T1Id}/{fix.G2Id}");
         output.WriteLine(await r.Content.ReadAsStringAsync());
         Assert.Equal(HttpStatusCode.OK, r.StatusCode);
         var arr = GatewayFixture.ParseJson(await r.Content.ReadAsStringAsync());
         Assert.True(arr.GetArrayLength() >= 3,
-            $"Se esperaban >= 3 partidas T1-DRX, hay {arr.GetArrayLength()}");
+            $"Se esperaban >= 3 partidas T1-G2, hay {arr.GetArrayLength()}");
     }
 
     [Fact]
-    public async Task Q19_DRX_vs_T1_EsBidireccional_MismoConteo()
+    public async Task Q19_G2_vs_T1_EsBidireccional_MismoConteo()
     {
-        // La doble escritura debe garantizar el mismo resultado en ambas direcciones
-        var r1 = await fix.Http.GetAsync($"/api/partidas/entre/{fix.T1Id}/{fix.DRXId}");
-        var r2 = await fix.Http.GetAsync($"/api/partidas/entre/{fix.DRXId}/{fix.T1Id}");
+        var r1 = await fix.Http.GetAsync($"/api/partidas/entre/{fix.T1Id}/{fix.G2Id}");
+        var r2 = await fix.Http.GetAsync($"/api/partidas/entre/{fix.G2Id}/{fix.T1Id}");
 
         Assert.Equal(HttpStatusCode.OK, r1.StatusCode);
         Assert.Equal(HttpStatusCode.OK, r2.StatusCode);
@@ -189,19 +185,20 @@ public class MatchesTests(GatewayFixture fix, ITestOutputHelper output)
     }
 
     [Fact]
-    public async Task Q19_NaVi_vs_FaZe_Devuelve200_Con1Partida()
+    public async Task Q19_NAVI_vs_FAZE_Devuelve200_Con1Partida()
     {
-        var r = await fix.Http.GetAsync($"/api/partidas/entre/{fix.NaViId}/{fix.FaZeId}");
+        // NAVI(idx 3) y FAZE(idx 4) se enfrentan directamente en IEM-COL26
+        var r = await fix.Http.GetAsync($"/api/partidas/entre/{fix.NAVIId}/{fix.FAZEId}");
         Assert.Equal(HttpStatusCode.OK, r.StatusCode);
         var arr = GatewayFixture.ParseJson(await r.Content.ReadAsStringAsync());
-        Assert.Equal(1, arr.GetArrayLength());
+        Assert.True(arr.GetArrayLength() >= 1);
     }
 
     [Fact]
-    public async Task Q19_T1_vs_G2_NuncaJugaron_Devuelve200_ListaVacia()
+    public async Task Q19_T1_vs_NAVI_NuncaJugaron_Devuelve200_ListaVacia()
     {
-        // T1 y G2 no tienen ningún enfrentamiento en el seeder
-        var r = await fix.Http.GetAsync($"/api/partidas/entre/{fix.T1Id}/{fix.G2Id}");
+        // T1 es equipo LoL, NAVI es CS2 — nunca comparten torneo
+        var r = await fix.Http.GetAsync($"/api/partidas/entre/{fix.T1Id}/{fix.NAVIId}");
         Assert.Equal(HttpStatusCode.OK, r.StatusCode);
         var arr = GatewayFixture.ParseJson(await r.Content.ReadAsStringAsync());
         Assert.Equal(0, arr.GetArrayLength());

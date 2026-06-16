@@ -69,8 +69,7 @@ public class ErrorTests(GatewayFixture fix, ITestOutputHelper output)
     [Fact]
     public async Task POST_CrearEquipo_SinBody_Devuelve400()
     {
-        var r = await fix.Http.PostAsync("/api/equipos",
-            new StringContent("", Encoding.UTF8, "application/json"));
+        var r = await fix.AdminPostJson("/api/equipos", "");
         Assert.True(
             r.StatusCode == HttpStatusCode.BadRequest ||
             r.StatusCode == HttpStatusCode.UnsupportedMediaType,
@@ -80,22 +79,14 @@ public class ErrorTests(GatewayFixture fix, ITestOutputHelper output)
     [Fact]
     public async Task POST_CrearEquipo_NombreVacio_Devuelve400()
     {
-        var body = JsonSerializer.Serialize(new { nombre = "", tag = "TST", pais = "CO" });
-        var r = await fix.Http.PostAsync("/api/equipos",
-            new StringContent(body, Encoding.UTF8, "application/json"));
-        // El modelo requiere nombre no vacío
-        Assert.True(
-            r.StatusCode == HttpStatusCode.BadRequest ||
-            r.StatusCode == HttpStatusCode.Created, // si no hay validación en el modelo, se acepta
-            $"Respuesta: {r.StatusCode}");
+        var r = await fix.AdminPost("/api/equipos", new { nombre = "", tag = "TST", pais = "CO" });
+        Assert.Equal(HttpStatusCode.BadRequest, r.StatusCode);
     }
 
     [Fact]
     public async Task POST_CrearVideojuego_SinGenero_Devuelve400()
     {
-        var body = JsonSerializer.Serialize(new { nombre = "TestGame" }); // falta genero
-        var r = await fix.Http.PostAsync("/api/videojuegos",
-            new StringContent(body, Encoding.UTF8, "application/json"));
+        var r = await fix.AdminPost("/api/videojuegos", new { nombre = "TestGame" }); // falta genero
         Assert.Equal(HttpStatusCode.BadRequest, r.StatusCode);
     }
 
@@ -103,7 +94,7 @@ public class ErrorTests(GatewayFixture fix, ITestOutputHelper output)
     public async Task POST_CrearTorneo_VideojuegoIdInexistente_Devuelve404()
     {
         // El service llama a GetVideojuegoById — si no existe, retorna 404
-        var body = JsonSerializer.Serialize(new
+        var r = await fix.AdminPost("/api/torneos", new
         {
             nombre = "Torneo Fantasma",
             codigo = $"TF{Guid.NewGuid():N}"[..10].ToUpper(),
@@ -111,8 +102,6 @@ public class ErrorTests(GatewayFixture fix, ITestOutputHelper output)
             organizadorId = fix.ESLId,
             fechaInicio = "2026-12-01T00:00:00Z"
         });
-        var r = await fix.Http.PostAsync("/api/torneos",
-            new StringContent(body, Encoding.UTF8, "application/json"));
         output.WriteLine($"POST torneo con VJ inexistente → {r.StatusCode}: {await r.Content.ReadAsStringAsync()}");
         Assert.Equal(HttpStatusCode.NotFound, r.StatusCode);
     }
@@ -120,7 +109,7 @@ public class ErrorTests(GatewayFixture fix, ITestOutputHelper output)
     [Fact]
     public async Task POST_CrearTorneo_OrganizadorIdInexistente_Devuelve404()
     {
-        var body = JsonSerializer.Serialize(new
+        var r = await fix.AdminPost("/api/torneos", new
         {
             nombre = "Torneo Fantasma",
             codigo = $"TF{Guid.NewGuid():N}"[..10].ToUpper(),
@@ -128,8 +117,6 @@ public class ErrorTests(GatewayFixture fix, ITestOutputHelper output)
             organizadorId = Guid.NewGuid(),     // ID que no existe
             fechaInicio = "2026-12-01T00:00:00Z"
         });
-        var r = await fix.Http.PostAsync("/api/torneos",
-            new StringContent(body, Encoding.UTF8, "application/json"));
         Assert.Equal(HttpStatusCode.NotFound, r.StatusCode);
     }
 
@@ -137,9 +124,7 @@ public class ErrorTests(GatewayFixture fix, ITestOutputHelper output)
     public async Task POST_InscribirEquipo_EnTorneoInexistente_SeIgnoraOError()
     {
         // El controller/service maneja el caso de torneo inexistente
-        var body = JsonSerializer.Serialize(new { equipoId = fix.T1Id });
-        var r = await fix.Http.PostAsync($"/api/torneos/{Guid.NewGuid()}/inscripciones",
-            new StringContent(body, Encoding.UTF8, "application/json"));
+        var r = await fix.AdminPost($"/api/torneos/{Guid.NewGuid()}/inscripciones", new { equipoId = fix.T1Id });
         output.WriteLine($"Inscripción en torneo inexistente → {r.StatusCode}");
         // Puede ser 404 (torneo no encontrado) o 201 (escritura sin validar — ambos son aceptables)
         Assert.True(
@@ -153,9 +138,7 @@ public class ErrorTests(GatewayFixture fix, ITestOutputHelper output)
     public async Task POST_InscribirEquipo_EquipoInexistente_Devuelve502o404()
     {
         // teams.GetEquipo retorna 404 → tournaments propaga como 404/502
-        var body = JsonSerializer.Serialize(new { equipoId = Guid.NewGuid() });
-        var r = await fix.Http.PostAsync($"/api/torneos/{fix.MSIId}/inscripciones",
-            new StringContent(body, Encoding.UTF8, "application/json"));
+        var r = await fix.AdminPost($"/api/torneos/{fix.MSIId}/inscripciones", new { equipoId = Guid.NewGuid() });
         output.WriteLine($"Inscripción con equipo inexistente → {r.StatusCode}: {await r.Content.ReadAsStringAsync()}");
         Assert.True(
             r.StatusCode == HttpStatusCode.NotFound ||
@@ -169,8 +152,7 @@ public class ErrorTests(GatewayFixture fix, ITestOutputHelper output)
     [Fact]
     public async Task POST_CrearPartida_SinBody_Devuelve400()
     {
-        var r = await fix.Http.PostAsync("/api/partidas",
-            new StringContent("", Encoding.UTF8, "application/json"));
+        var r = await fix.AdminPostJson("/api/partidas", "");
         Assert.True(
             r.StatusCode == HttpStatusCode.BadRequest ||
             r.StatusCode == HttpStatusCode.UnsupportedMediaType);

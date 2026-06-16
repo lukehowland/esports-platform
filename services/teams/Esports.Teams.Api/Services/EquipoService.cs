@@ -32,9 +32,9 @@ public class EquipoService : IEquipoService
         var equipo = new Equipo
         {
             EquipoId = Guid.NewGuid(),
-            Nombre = request.Nombre,
-            Tag = request.Tag,
-            Pais = request.Pais,
+            Nombre = request.Nombre.Trim(),
+            Tag = request.Tag.Trim().ToUpperInvariant(),
+            Pais = request.Pais.Trim().ToUpperInvariant(),
             FechaCreacion = DateTimeOffset.UtcNow
         };
         await _equipoRepo.CrearEquipoAsync(equipo);
@@ -53,10 +53,10 @@ public class EquipoService : IEquipoService
         var jugador = new Jugador
         {
             JugadorId = Guid.NewGuid(),
-            Nickname = request.Nickname,
-            Nombre = request.Nombre,
-            Pais = request.Pais,
-            Rol = request.Rol,
+            Nickname = request.Nickname.Trim(),
+            Nombre = request.Nombre.Trim(),
+            Pais = request.Pais.Trim().ToUpperInvariant(),
+            Rol = request.Rol.Trim().ToUpperInvariant(),
             EquipoId = equipoId,
             FechaRegistro = DateTimeOffset.UtcNow
         };

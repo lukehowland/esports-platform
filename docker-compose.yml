@@ -8,8 +8,6 @@ services:
       CASSANDRA_CLUSTER_NAME: esports-cluster
       MAX_HEAP_SIZE: 512M
       HEAP_NEWSIZE: 128M
-    volumes:
-      - cassandra-data:/var/lib/cassandra
     healthcheck:
       test: ["CMD-SHELL", "cqlsh -e 'describe keyspaces' || exit 1"]
       interval: 15s
@@ -45,6 +43,9 @@ services:
       Cassandra__ContactPoints: cassandra
       Cassandra__Port: "9042"
       Cassandra__Keyspace: esports_teams
+      Jwt__Secret: 'esports-platform-dev-only-jwt-secret-insecure'
+      Jwt__Issuer: esports-auth
+      Jwt__Audience: esports-platform
     ports:
       - "5001:8080"
     depends_on:
@@ -74,6 +75,9 @@ services:
       RabbitMq__Username: guest
       RabbitMq__Password: guest
       Services__Teams: http://teams:8080
+      Jwt__Secret: 'esports-platform-dev-only-jwt-secret-insecure'
+      Jwt__Issuer: esports-auth
+      Jwt__Audience: esports-platform
     ports:
       - "5002:8080"
     depends_on:
@@ -106,6 +110,10 @@ services:
       RabbitMq__Host: rabbitmq
       RabbitMq__Username: guest
       RabbitMq__Password: guest
+      Services__Tournaments: http://tournaments:8080
+      Jwt__Secret: 'esports-platform-dev-only-jwt-secret-insecure'
+      Jwt__Issuer: esports-auth
+      Jwt__Audience: esports-platform
     ports:
       - "5003:8080"
     depends_on:
@@ -152,6 +160,37 @@ services:
     networks:
       - esports-net
 
+  auth:
+    build:
+      context: .
+      dockerfile: services/auth/Esports.Auth.Api/Dockerfile
+    container_name: esports-auth
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      ASPNETCORE_URLS: http://0.0.0.0:8080
+      Cassandra__ContactPoints: cassandra
+      Cassandra__Port: "9042"
+      Cassandra__Keyspace: esports_auth
+      Jwt__Secret: 'esports-platform-dev-only-jwt-secret-insecure'
+      Jwt__Issuer: esports-auth
+      Jwt__Audience: esports-platform
+      Jwt__ExpiresHours: "8"
+      Auth__AdminUser: admin
+      Auth__AdminPassword: admin-dev-password
+    ports:
+      - "5005:8080"
+    depends_on:
+      cassandra:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    networks:
+      - esports-net
+
   gateway:
     build:
       context: .
@@ -175,6 +214,8 @@ services:
         condition: service_healthy
       ranking:
         condition: service_healthy
+      auth:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
       interval: 10s
@@ -196,8 +237,8 @@ services:
     ports:
       - "3000:3000"
     depends_on:
-      gateway:
-        condition: service_healthy
+      seeder:
+        condition: service_completed_successfully
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]
       interval: 15s
@@ -214,13 +255,15 @@ services:
     container_name: esports-seeder
     environment:
       GatewayUrl: http://gateway:8080
+      Auth__AdminUser: admin
+      Auth__AdminPassword: admin-dev-password
     depends_on:
       gateway:
-        condition: service_started
+        condition: service_healthy
+      auth:
+        condition: service_healthy
     networks:
       - esports-net
-    profiles:
-      - seed
 
   tests:
     build:
@@ -230,15 +273,12 @@ services:
     environment:
       GATEWAY_URL: http://gateway:8080
     depends_on:
-      gateway:
-        condition: service_healthy
+      seeder:
+        condition: service_completed_successfully
     networks:
       - esports-net
     profiles:
       - test
-
-volumes:
-  cassandra-data:
 
 networks:
   esports-net:

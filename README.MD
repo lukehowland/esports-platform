@@ -26,15 +26,10 @@ La primera vez tarda ~3–5 minutos (descarga imágenes y compila). Las siguient
 Esperar hasta ver en los logs:
 ```
 esports-gateway  | Now listening on: http://0.0.0.0:8080
+esports-seeder   | === Seeder completado con exito ===
 ```
 
-### Cargar datos de ejemplo (opcional)
-
-En otra terminal, con el stack ya levantado:
-
-```bash
-docker compose run --rm seeder
-```
+El seeder corre automaticamente en cada arranque limpio y carga datos realistas conectados para todos los servicios.
 
 ## URLs
 
@@ -45,7 +40,27 @@ docker compose run --rm seeder
 | Swagger — tournaments | http://localhost:5002/swagger |
 | Swagger — matches | http://localhost:5003/swagger |
 | Swagger — ranking | http://localhost:5004/swagger |
+| Swagger — auth | http://localhost:5005/swagger |
 | RabbitMQ Management | http://localhost:15672 (guest/guest) |
+
+## Autenticación demo
+
+Las lecturas Q1–Q24 son públicas. Las mutaciones requieren `Authorization: Bearer <token>` emitido por `auth`.
+
+```bash
+curl -X POST http://localhost:8080/api/auth/login \
+  -H 'Content-Type: application/json' \
+  -d '{"username":"admin","password":"admin-dev-password"}'
+```
+
+Usuarios sembrados automáticamente:
+
+| Rol | Usuario | Password | Uso |
+|---|---|---|---|
+| admin | `admin` | `admin-dev-password` | seeder/tests, puede todo |
+| organizador | `org_riot`, `org_esl`, `org_blast`, etc. | `OrgDemo2024` | solo su `organizadorId` |
+| capitan | `cap_t1`, `cap_navi`, `cap_g2`, etc. | `CapDemo2024` | solo su `equipoId` |
+| fan | `fan_demo` | `FanDemo2024` | solo lectura |
 
 ## Endpoints principales (Q1–Q24)
 
@@ -78,14 +93,13 @@ GET  /api/stats/equipo/{equipoId}/torneo/{torneoId}  Q24
 
 ## Tests de integración
 
-El proyecto incluye 97 tests de integración que verifican todas las funcionalidades (Q1–Q24) y casos de error a través del gateway.
+El proyecto incluye 122 tests de integración que verifican Q1–Q24, casos de error y autorización por rol/ownership a través del gateway.
 
-**Prerequisitos:** el stack debe estar levantado y el seeder debe haber corrido.
+**Prerequisitos:** el stack debe estar levantado. El seeder corre automaticamente antes del frontend y antes de los tests.
 
 ```bash
-# Levantar stack + seeder (si no está levantado)
+# Levantar stack completo
 docker compose up --build
-docker compose run --rm seeder
 
 # Ejecutar los tests
 docker compose run --rm tests
@@ -94,6 +108,7 @@ docker compose run --rm tests
 Los tests cubren:
 - Q1–Q24: todos los endpoints de lectura con resultados esperados exactos
 - Casos de error: 404, 400, cuerpos inválidos, GUIDs inexistentes, métodos HTTP incorrectos
+- Auth: login, `/api/auth/me`, lecturas públicas, `401` sin token y `403` por rol/ownership incorrecto
 - Invariantes: orden descendente en rankings, bidireccionalidad en Q19, suma `victorias + derrotas = partidas_jugadas`
 
 ## Comandos útiles
@@ -105,11 +120,11 @@ docker compose logs -f tournaments
 # Entrar a la consola CQL de Cassandra
 docker compose exec cassandra cqlsh
 
-# Bajar el stack (conserva datos)
+# Bajar el stack. Al volver a levantar, Cassandra inicia limpia y el seeder repuebla.
 docker compose down
 
-# Reset completo (borra la base de datos)
-docker compose down -v
+# Arranque limpio con datos demo frescos
+docker compose down
 docker compose up --build
 ```
 
@@ -121,6 +136,7 @@ docker compose up --build
 | tournaments | esports_tournaments | 5002 | Q8–Q15, Q20, Q21 |
 | matches | esports_matches | 5003 | Q16–Q19 |
 | ranking | esports_ranking | 5004 | Q7, Q22–Q24 |
+| auth | esports_auth | 5005 | login/JWT/roles |
 | gateway | — | 8080 | proxy único |
 
 ## Troubleshooting

@@ -1,14 +1,16 @@
+using System.ComponentModel.DataAnnotations;
+
 namespace Esports.Matches.Api.Dtos;
 
 public record RegistrarPartidaRequest(
     Guid TorneoId,
-    string NombreTorneo,
+    [Required, RegularExpression(@".*\S.*"), MaxLength(160)] string NombreTorneo,
     Guid EquipoLocalId,
-    string NombreLocal,
+    [Required, RegularExpression(@".*\S.*"), MaxLength(120)] string NombreLocal,
     Guid EquipoVisitanteId,
-    string NombreVisitante,
+    [Required, RegularExpression(@".*\S.*"), MaxLength(120)] string NombreVisitante,
     Guid EquipoGanadorId,
-    string Resultado,
+    [Required, RegularExpression(@".*\S.*"), MaxLength(80)] string Resultado,
     DateTimeOffset Fecha);
 
 public record PartidaResponse(

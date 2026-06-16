@@ -2,6 +2,7 @@ FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 WORKDIR /src
 
 COPY shared/Esports.Shared/Esports.Shared.csproj shared/Esports.Shared/
+COPY shared/Esports.Auth.Shared/Esports.Auth.Shared.csproj shared/Esports.Auth.Shared/
 COPY services/tournaments/Esports.Tournaments.Api/Esports.Tournaments.Api.csproj services/tournaments/Esports.Tournaments.Api/
 RUN dotnet restore services/tournaments/Esports.Tournaments.Api/Esports.Tournaments.Api.csproj
 

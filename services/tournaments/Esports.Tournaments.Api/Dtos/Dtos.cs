@@ -1,18 +1,23 @@
+using System.ComponentModel.DataAnnotations;
+
 namespace Esports.Tournaments.Api.Dtos;
 
 // Videojuegos
-public record CrearVideojuegoRequest(string Nombre, string Genero);
+public record CrearVideojuegoRequest(
+    [Required, RegularExpression(@".*\S.*"), MaxLength(120)] string Nombre,
+    [Required, RegularExpression(@".*\S.*"), MaxLength(40)] string Genero);
 public record VideojuegoResponse(Guid VideojuegoId, string Nombre, string Genero);
 public record VideojuegoPorGeneroResponse(Guid VideojuegoId, string Nombre);
 
 // Organizadores
-public record CrearOrganizadorRequest(string Nombre);
+public record CrearOrganizadorRequest(
+    [Required, RegularExpression(@".*\S.*"), MaxLength(120)] string Nombre);
 public record OrganizadorResponse(Guid OrganizadorId, string Nombre);
 
 // Torneos
 public record CrearTorneoRequest(
-    string Nombre,
-    string Codigo,
+    [Required, RegularExpression(@".*\S.*"), MaxLength(160)] string Nombre,
+    [Required, RegularExpression(@".*\S.*"), MaxLength(32)] string Codigo,
     Guid VideojuegoId,
     Guid OrganizadorId,
     DateTimeOffset FechaInicio);
@@ -44,6 +49,9 @@ public record EquipoPorTorneoResponse(Guid EquipoId, string NombreEquipo, DateTi
 public record TorneoPorEquipoResponse(Guid TorneoId, string NombreTorneo, string NombreVideojuego, DateTimeOffset FechaInicio);
 
 // Premios
-public record AsignarPremioRequest(decimal Monto, string Tipo, Guid? EquipoId);
+public record AsignarPremioRequest(
+    [Range(0.01, 999999999)] decimal Monto,
+    [Required, RegularExpression(@".*\S.*"), MaxLength(80)] string Tipo,
+    Guid? EquipoId);
 public record PremioResponse(Guid PremioId, Guid TorneoId, decimal Monto, string Tipo, Guid? EquipoId, string? NombreEquipo);
 public record PremioEquipoResponse(Guid PremioId, Guid TorneoId, string NombreTorneo, decimal Monto, string Tipo);

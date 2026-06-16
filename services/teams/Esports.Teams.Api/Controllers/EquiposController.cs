@@ -1,5 +1,7 @@
+using Esports.Auth.Shared;
 using Esports.Teams.Api.Dtos;
 using Esports.Teams.Api.Services;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Esports.Teams.Api.Controllers;
@@ -13,6 +15,7 @@ public class EquiposController : ControllerBase
     public EquiposController(IEquipoService service) => _service = service;
 
     [HttpPost]
+    [Authorize(Roles = AuthConstants.Roles.Admin)]
     public async Task<IActionResult> CrearEquipo([FromBody] CrearEquipoRequest request)
     {
         var result = await _service.CrearEquipoAsync(request);
@@ -28,8 +31,18 @@ public class EquiposController : ControllerBase
     }
 
     [HttpPost("{equipoId:guid}/jugadores")]
+    [Authorize]
     public async Task<IActionResult> AgregarJugador(Guid equipoId, [FromBody] AgregarJugadorRequest request)
     {
+        if (!User.EsAdmin())
+        {
+            if (User.GetRol() != AuthConstants.Roles.Capitan || User.GetEquipoId() != equipoId)
+                return Problem(
+                    title: "Acceso denegado",
+                    statusCode: StatusCodes.Status403Forbidden,
+                    detail: "Solo el capitán del equipo puede agregar jugadores.");
+        }
+
         var equipo = await _service.ObtenerPorIdAsync(equipoId);
         if (equipo is null) return NotFound();
         var jugador = await _service.AgregarJugadorAsync(equipoId, request);

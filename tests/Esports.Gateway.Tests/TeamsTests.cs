@@ -1,5 +1,4 @@
 using System.Net;
-using System.Net.Http.Json;
 using System.Text;
 using System.Text.Json;
 using Xunit;
@@ -7,9 +6,6 @@ using Xunit.Abstractions;
 
 namespace Esports.Gateway.Tests;
 
-/// <summary>
-/// Tests de integración para el servicio teams (Q1–Q6) vía gateway :8080.
-/// </summary>
 [Collection("Gateway")]
 public class TeamsTests(GatewayFixture fix, ITestOutputHelper output)
 {
@@ -37,13 +33,13 @@ public class TeamsTests(GatewayFixture fix, ITestOutputHelper output)
     }
 
     [Fact]
-    public async Task Q1_s1mple_NaVi_Devuelve200()
+    public async Task Q1_s1mple_NAVI_Devuelve200()
     {
         var r = await fix.Http.GetAsync("/api/jugadores/por-nickname/s1mple");
         Assert.Equal(HttpStatusCode.OK, r.StatusCode);
         var doc = GatewayFixture.ParseJson(await r.Content.ReadAsStringAsync());
-        Assert.Equal("UA", doc.GetProperty("pais").GetString());
-        Assert.Equal("SNIPER", doc.GetProperty("rol").GetString());
+        Assert.Equal("UA",  doc.GetProperty("pais").GetString());
+        Assert.Equal("AWP", doc.GetProperty("rol").GetString());
     }
 
     // ─── Q2: Jugadores por país ─────────────────────────────────────────────────
@@ -54,11 +50,11 @@ public class TeamsTests(GatewayFixture fix, ITestOutputHelper output)
         var r = await fix.Http.GetAsync("/api/jugadores/por-pais/KR");
         Assert.Equal(HttpStatusCode.OK, r.StatusCode);
         var arr = GatewayFixture.ParseJson(await r.Content.ReadAsStringAsync());
-        Assert.True(arr.GetArrayLength() >= 5, $"Se esperaban >= 5 jugadores KR, pero hay {arr.GetArrayLength()}");
+        Assert.True(arr.GetArrayLength() >= 5, $"Se esperaban >= 5 jugadores KR, hay {arr.GetArrayLength()}");
     }
 
     [Fact]
-    public async Task Q2_PaisDK_Devuelve200_ConAlMenos1Jugador()
+    public async Task Q2_PaisDK_Devuelve200_ConKarriganDeFAZE()
     {
         var r = await fix.Http.GetAsync("/api/jugadores/por-pais/DK");
         Assert.Equal(HttpStatusCode.OK, r.StatusCode);
@@ -115,8 +111,7 @@ public class TeamsTests(GatewayFixture fix, ITestOutputHelper output)
     [Fact]
     public async Task Q3_EquipoIdInexistente_Devuelve200_ListaVacia()
     {
-        var fakeId = Guid.NewGuid();
-        var r = await fix.Http.GetAsync($"/api/equipos/{fakeId}/jugadores");
+        var r = await fix.Http.GetAsync($"/api/equipos/{Guid.NewGuid()}/jugadores");
         Assert.Equal(HttpStatusCode.OK, r.StatusCode);
         var arr = GatewayFixture.ParseJson(await r.Content.ReadAsStringAsync());
         Assert.Equal(0, arr.GetArrayLength());
@@ -162,12 +157,12 @@ public class TeamsTests(GatewayFixture fix, ITestOutputHelper output)
     }
 
     [Fact]
-    public async Task Q5_TagDRX_Devuelve200()
+    public async Task Q5_TagNAVI_Devuelve200()
     {
-        var r = await fix.Http.GetAsync("/api/equipos/por-tag/DRX");
+        var r = await fix.Http.GetAsync("/api/equipos/por-tag/NAVI");
         Assert.Equal(HttpStatusCode.OK, r.StatusCode);
         var doc = GatewayFixture.ParseJson(await r.Content.ReadAsStringAsync());
-        Assert.Equal("DRX", doc.GetProperty("nombre").GetString());
+        Assert.True(doc.GetProperty("nombre").GetString()!.Contains("Natus Vincere"));
     }
 
     [Fact]
@@ -195,14 +190,14 @@ public class TeamsTests(GatewayFixture fix, ITestOutputHelper output)
     }
 
     [Fact]
-    public async Task Q6_IntegrantesNaVi_Devuelve200_Con2Jugadores()
+    public async Task Q6_IntegrantesNAVI_Devuelve200_Con2Jugadores()
     {
-        var r = await fix.Http.GetAsync($"/api/equipos/{fix.NaViId}/integrantes");
+        var r = await fix.Http.GetAsync($"/api/equipos/{fix.NAVIId}/integrantes");
         Assert.Equal(HttpStatusCode.OK, r.StatusCode);
         var arr = GatewayFixture.ParseJson(await r.Content.ReadAsStringAsync());
         Assert.Equal(2, arr.GetArrayLength());
         var nicknames = arr.EnumerateArray().Select(e => e.GetProperty("nickname").GetString()).ToList();
-        Assert.Contains("s1mple",    nicknames);
+        Assert.Contains("s1mple",     nicknames);
         Assert.Contains("electronic", nicknames);
     }
 
@@ -221,9 +216,7 @@ public class TeamsTests(GatewayFixture fix, ITestOutputHelper output)
     public async Task POST_CrearEquipo_Devuelve201_ConEquipoId()
     {
         var uniqueTag = $"TST{Guid.NewGuid():N}"[..8].ToUpper();
-        var body = JsonSerializer.Serialize(new { nombre = "Test Team", tag = uniqueTag, pais = "CO" });
-        var r = await fix.Http.PostAsync("/api/equipos",
-            new StringContent(body, Encoding.UTF8, "application/json"));
+        var r = await fix.AdminPost("/api/equipos", new { nombre = "Test Team", tag = uniqueTag, pais = "CO" });
 
         Assert.Equal(HttpStatusCode.Created, r.StatusCode);
         var doc = GatewayFixture.ParseJson(await r.Content.ReadAsStringAsync());
@@ -233,8 +226,7 @@ public class TeamsTests(GatewayFixture fix, ITestOutputHelper output)
     [Fact]
     public async Task POST_CrearEquipoConCuerpoVacio_Devuelve400()
     {
-        var r = await fix.Http.PostAsync("/api/equipos",
-            new StringContent("{}", Encoding.UTF8, "application/json"));
+        var r = await fix.AdminPost("/api/equipos", new { });
         Assert.True(
             r.StatusCode == HttpStatusCode.BadRequest ||
             r.StatusCode == HttpStatusCode.UnprocessableEntity,

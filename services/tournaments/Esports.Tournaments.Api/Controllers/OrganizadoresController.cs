@@ -1,5 +1,7 @@
+using Esports.Auth.Shared;
 using Esports.Tournaments.Api.Dtos;
 using Esports.Tournaments.Api.Services;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Esports.Tournaments.Api.Controllers;
@@ -12,6 +14,7 @@ public class OrganizadoresController : ControllerBase
     public OrganizadoresController(IOrganizadorService svc) => _svc = svc;
 
     [HttpPost]
+    [Authorize(Roles = AuthConstants.Roles.Admin)]
     public async Task<IActionResult> Crear([FromBody] CrearOrganizadorRequest req)
     {
         var result = await _svc.CrearAsync(req);

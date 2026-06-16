@@ -22,12 +22,72 @@ Así el gateway rutea por prefijo, sin ambigüedad ni reglas especiales:
 | `/api/partidas/**` | matches |
 | `/api/ranking/**` | ranking |
 | `/api/stats/**` | ranking |
+| `/api/auth/**` | auth |
 
 Ejemplo de la regla en acción: "torneos de un equipo" (Q14) NO va a `/api/equipos/{id}/torneos` (eso sería teams), va a `/api/torneos/por-equipo/{equipoId}` (la tabla `torneos_por_equipo` vive en tournaments). "Historial de un equipo" (Q17) va a `/api/partidas/por-equipo/{equipoId}` (matches).
 
 ## Códigos de estado
 
-`200` lectura ok · `201` creado · `400` input inválido · `404` no existe · `502/503` dependencia REST caída · errores con cuerpo `ProblemDetails`.
+`200` lectura ok · `201` creado · `400` input inválido · `401` sin token/token inválido · `403` rol u ownership incorrecto · `404` no existe · `502/503` dependencia REST caída · errores con cuerpo `ProblemDetails`.
+
+---
+
+## auth — `/api/auth`
+
+### Login
+- `POST /api/auth/login` — devuelve JWT y perfil.
+  ```jsonc
+  { "username": "org_riot", "password": "OrgDemo2024" }
+  ```
+  Respuesta:
+  ```jsonc
+  {
+    "token": "jwt",
+    "rol": "organizador",
+    "nombre": "Riot Games",
+    "organizadorId": "uuid|null",
+    "equipoId": "uuid|null",
+    "expiraEn": "2026-06-17T03:14:51Z"
+  }
+  ```
+
+### Registro demo
+- `POST /api/auth/register` — crea usuarios demo; protegido, solo `admin`.
+  ```jsonc
+  {
+    "username": "cap_t1",
+    "password": "CapDemo2024",
+    "rol": "capitan",
+    "equipoId": "uuid",
+    "nombreDisplay": "Capitan T1"
+  }
+  ```
+  Valida rol y vinculos:
+  - `admin` y `fan` no aceptan `organizadorId` ni `equipoId`.
+  - `organizador` requiere `organizadorId` y no acepta `equipoId`.
+  - `capitan` requiere `equipoId` y no acepta `organizadorId`.
+  - Roles fuera de `admin`, `organizador`, `capitan`, `fan` devuelven `400`.
+
+### Perfil
+- `GET /api/auth/me` — requiere token y devuelve claims normalizados:
+  ```jsonc
+  { "username": "admin", "rol": "admin", "nombre": "Administrador del sistema" }
+  ```
+
+### Reglas de autorización
+
+| Mutación | Regla |
+|---|---|
+| `POST /api/equipos` | `admin` |
+| `POST /api/equipos/{equipoId}/jugadores` | `admin` o `capitan` con `equipo_id == equipoId` |
+| `POST /api/videojuegos` | `admin` u `organizador` |
+| `POST /api/organizadores` | `admin` |
+| `POST /api/torneos` | `admin` u `organizador` con `organizador_id == organizadorId` del body |
+| `POST /api/torneos/{torneoId}/inscripciones` | `admin` o `capitan` con `equipo_id == equipoId` del body |
+| `POST /api/torneos/{torneoId}/premios` | `admin` u `organizador` dueño del torneo |
+| `POST /api/partidas` | `admin` u `organizador` dueño del torneo; `matches` verifica por REST contra `tournaments` |
+
+Todas las lecturas Q1–Q24 son públicas/anónimas.
 
 ---
 

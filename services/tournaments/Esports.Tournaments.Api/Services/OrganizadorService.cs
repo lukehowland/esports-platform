@@ -20,7 +20,7 @@ public class OrganizadorService : IOrganizadorService
 
     public async Task<OrganizadorResponse> CrearAsync(CrearOrganizadorRequest req)
     {
-        var o = new Organizador { OrganizadorId = Guid.NewGuid(), Nombre = req.Nombre };
+        var o = new Organizador { OrganizadorId = Guid.NewGuid(), Nombre = req.Nombre.Trim() };
         await _repo.CrearAsync(o);
         return new OrganizadorResponse(o.OrganizadorId, o.Nombre);
     }

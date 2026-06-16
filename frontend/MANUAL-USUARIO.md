@@ -24,21 +24,15 @@ cd esports-platform
 docker compose up --build
 ```
 
-La primera vez tarda 3–5 minutos. Cuando veas los logs de los 5 servicios levantados, abrí:
+La primera vez tarda 3–5 minutos. El seeder corre automaticamente: espera hasta ver `esports-seeder | === Seeder completado con exito ===`. Luego abrí:
 
 - **Frontend**: http://localhost:3000
 - **API Gateway (solo API)**: http://localhost:8080
 - **RabbitMQ Management**: http://localhost:15672 (usuario: `guest`, contraseña: `guest`)
 
-### Cargar datos de ejemplo (recomendado)
+### Datos de ejemplo
 
-En otra terminal, con el stack corriendo:
-
-```bash
-docker compose run --rm seeder
-```
-
-Esto carga 8 equipos, 4 videojuegos, 3 organizadores, 5 torneos, inscripciones, premios y partidas de ejemplo.
+No hay un paso manual. En cada arranque limpio, `docker compose up --build` ejecuta el seeder y carga datos conectados para toda la plataforma: 40 equipos, 5 videojuegos, 7 organizadores, 12 torneos, inscripciones, premios, partidas, rankings y estadisticas.
 
 ---
 
@@ -122,8 +116,7 @@ Descripción general de la plataforma y diagrama de la arquitectura de microserv
 |---|---|
 | MOBA | League of Legends, Dota 2 |
 | FPS | CS2, Valorant |
-| BATTLE_ROYALE | Fortnite |
-| RTS | StarCraft II |
+| SPORTS | Rocket League |
 
 ---
 
@@ -159,11 +152,11 @@ Descripción general de la plataforma y diagrama de la arquitectura de microserv
 # Ver logs de un servicio
 docker compose logs -f frontend
 
-# Bajar el stack conservando datos
+# Bajar el stack. Al volver a levantar, Cassandra inicia limpia y el seeder repuebla.
 docker compose down
 
-# Reset completo (borra toda la base de datos)
-docker compose down -v
+# Arranque limpio con datos demo frescos
+docker compose down
 docker compose up --build
 
 # Consola CQL de Cassandra

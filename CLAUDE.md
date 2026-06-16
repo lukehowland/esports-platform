@@ -2,94 +2,120 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## Estado del repo
+---
 
-**Este repo está en etapa de planificación**: solo existen `docs/` (las especificaciones) y este `CLAUDE.md`. Todavía no hay código (.NET, Cassandra, RabbitMQ, etc.). La implementación se hace siguiendo `docs/07-plan-ejecucion.md` fase por fase, empezando por **Fase 0 (scaffolding)**.
+# Esports Platform — Sistemas Distribuidos, UNIVALLE
 
-**Antes de escribir cualquier código, leé `docs/01` a `docs/06`** — definen arquitectura, modelo de datos, convenciones, contratos de API y eventos exactos que hay que respetar. No inventes nombres de tablas, rutas, namespaces ni tipos de evento: ya están todos decididos en esos docs.
+> Este archivo es la **constitución del proyecto**. Claude Code lo lee automáticamente al iniciar. Cualquier agente que trabaje en este repo DEBE respetar lo que está acá. Si algo contradice estas reglas, gana este archivo.
 
-| Doc | Contenido |
-|---|---|
-| `docs/01-arquitectura.md` | Microservicios, fronteras, REST vs eventos, BATCH/dual-write |
-| `docs/02-modelo-datos.md` | DDL completo de Cassandra (Chebotko), mapa query→tabla→servicio |
-| `docs/03-convenciones.md` | Casing, idioma, namespaces, estructura de carpetas |
-| `docs/04-contratos-api.md` | Endpoints REST exactos (request/response) y ruteo del gateway |
-| `docs/05-eventos.md` | Contrato de evento `TeamRegisteredToTournament` (MassTransit) |
-| `docs/06-docker-setup.md` | `docker-compose.yml`, Dockerfiles, bootstrap de schema |
-| `docs/07-plan-ejecucion.md` | Plan de fases (0–7) para construir el sistema con agentes |
-| `docs/08-commits.md` | Reglas de commits atómicos, formato Conventional Commits, en inglés |
+## 1. Qué estamos construyendo
 
-## Visión general de la arquitectura
+Backend de una **plataforma de gestión de torneos de eSports multiplataforma**, en arquitectura de **microservicios .NET 10** sobre **Apache Cassandra** (modelado con metodología Chebotko, query-first). El modelo cubre **24 consultas (Q1–Q24)** repartidas en **24 tablas desnormalizadas**. El backend expone una API REST a través de un **API Gateway** para que el equipo de frontend trabaje contra una sola URL. Todo corre en **Docker** y debe funcionar idéntico en **macOS (Apple Silicon)** y **Windows**.
 
-Sistema distribuido de 4 microservicios .NET 10 + un API Gateway (YARP), cada uno con su propio keyspace de Cassandra (**database-per-service**). Comunicación entre servicios: **REST síncrono** (cuando se necesita un dato de otro al momento) y **eventos por RabbitMQ/MassTransit v8** (para reaccionar a hechos sin acoplarse).
+Son **4 microservicios + 1 gateway**:
 
-| Servicio | Puerto | Keyspace | Dueño de |
-|---|---|---|---|
-| `teams` | 5002 | `esports_teams` | Equipos, jugadores (Q3, Q10) |
-| `tournaments` | 5001 | `esports_tournaments` | Torneos, premios, inscripciones (Q1, Q2, Q5, Q6, Q7) — **publica** `TeamRegisteredToTournament` |
-| `matches` | 5003 | `esports_matches` | Partidas (Q4, Q8) |
-| `ranking` | 5004 | `esports_ranking` | Ranking global, **solo lectura pública**, event-driven (Q9) — **consume** `TeamRegisteredToTournament` |
-| `gateway` | 8080 | — | YARP, única URL pública para el frontend |
+| Servicio | Keyspace | Puerto interno | Puerto host (dev) | Dominio | Queries |
+|---|---|---|---|---|---|
+| `teams` | `esports_teams` | 8080 | 5001 | Jugadores y equipos | Q1–Q6 |
+| `tournaments` | `esports_tournaments` | 8080 | 5002 | Videojuegos, organizadores, torneos, inscripciones, premios | Q8–Q15, Q20, Q21 |
+| `matches` | `esports_matches` | 8080 | 5003 | Partidas y enfrentamientos | Q16–Q19 |
+| `ranking` | `esports_ranking` | 8080 | 5004 | Rankings y estadísticas (event-driven) | Q7, Q22, Q23, Q24 |
+| `gateway` | — | 8080 | **8080** | Puerta de entrada única (YARP) | — |
 
-**`teams` es la plantilla de oro**: se implementa primero end-to-end y los demás servicios se construyen copiando su estructura de carpetas.
+El **frontend pega solo a `http://localhost:8080`**.
 
-### Flujo end-to-end de referencia (inscribir equipo en torneo)
+> Nota de diseño: `tournaments` es el servicio más grande (aloja también los catálogos de videojuegos y organizadores, porque solo existen en función de los torneos, y los premios, porque pertenecen al torneo). Es deliberado y defendible. Por eso en el plan de ejecución se construye después de `teams` y se le dedica más tiempo.
 
-`POST /api/torneos/{id}/inscripciones` → gateway → `tournaments` pide `nombre_equipo` a `teams` por REST (`HttpClient` tipado, nunca `new HttpClient()`) → `tournaments` escribe `equipos_por_torneo` + `torneos_por_equipo` en un **`BATCH`** → publica `TeamRegisteredToTournament` → `ranking` lo consume async y hace `UPDATE ... total_torneos + 1` (counter). La respuesta 201 no espera ese último paso (eventual consistency).
+## 2. Stack fijo (NO cambiar versiones sin avisar)
 
-### Reglas de dual-write
+- **.NET 10** (LTS). Imágenes: `mcr.microsoft.com/dotnet/sdk:10.0` y `mcr.microsoft.com/dotnet/aspnet:10.0`.
+- **Apache Cassandra** → imagen `cassandra:5.0` (multi-arch: corre nativo en ARM y x86).
+- **RabbitMQ** → imagen `rabbitmq:3-management`.
+- **Driver Cassandra**: `CassandraCSharpDriver` (oficial de DataStax). **NO usar Entity Framework** — esto es Cassandra, no SQL relacional.
+- **Mensajería**: `MassTransit.RabbitMQ` **versión 8.x** (Apache 2.0, gratis). ⚠️ **PROHIBIDO instalar MassTransit 9.x** — la v9 es comercial y requiere licencia de pago; rompería el build. Pinear `Version="8.*"`.
+- **Gateway**: `Yarp.ReverseProxy` (reverse proxy de Microsoft, configuración por `appsettings.json`).
+- **Docs de API**: Swagger/OpenAPI en cada servicio (`Swashbuckle.AspNetCore`).
+- **Resiliencia**: `Polly` para retries de conexión a Cassandra al arrancar.
 
-- **Misma base/servicio**: tablas desnormalizadas se escriben juntas en un **`BATCH` (logged)** de CQL.
-- **Bases distintas**: nunca BATCH entre keyspaces de servicios distintos — usar REST o eventos.
+## 3. Cómo debe trabajar un agente acá
 
-## Modelo de datos (Cassandra / Chebotko)
+1. **Antes de escribir código, leé `docs/` en este orden:** `01-arquitectura` → `02-modelo-datos` → `03-convenciones` → `04-contratos-api` → `05-eventos` → `06-docker-setup`. El plan paso a paso está en `docs/07-plan-ejecucion.md`. Las convenciones de commits están en `docs/08-commits.md`.
+2. **No inventes nombres.** Namespaces, tablas, columnas, rutas y eventos ya están definidos en `docs/`. Usalos tal cual.
+3. **Idempotencia siempre.** Keyspaces y tablas se crean al arrancar con `CREATE ... IF NOT EXISTS`. El proyecto tiene que levantar con `docker compose up` sin pasos manuales.
+4. **Un servicio se construye completo antes de pasar al siguiente.** El primer servicio (`teams`) es la **plantilla**: una vez que funciona, los demás copian su estructura.
+5. **No sobre-ingenierizar.** Tenemos deadline. Un proyecto por servicio con carpetas (no Clean Architecture de varios proyectos). Lo justo para cumplir las 24 queries + alimentar el frontend.
 
-Query-first: cada query (Q1–Q10) tiene su propia tabla, con datos desnormalizados a propósito (`nombre_equipo`, `nombre_torneo`, etc. duplicados entre tablas). El DDL completo está en `docs/02-modelo-datos.md`; puntos clave a no romper:
+## 4. Reglas de oro (restricciones duras)
 
-- **`ranking_equipos_global`** usa `PARTITION KEY = bucket` (siempre `'GLOBAL'`), `CLUSTERING KEY = equipo_id`, y `total_torneos` es una columna **`counter`** (no va en la clustering key — es la corrección aplicada al diseño Chebotko original). Como es tabla de counters, **no puede tener columnas no-counter** (por eso no lleva `nombre_equipo`). Top-N = leer toda la partición y ordenar en memoria con `OrderByDescending(...).Take(n)`.
-- Cada servicio agrega **tablas base "por id"** (`equipos`, `jugadores`, `torneos`, `partidas`) además de las tablas de consulta — no están en el diagrama Chebotko original pero son requeridas.
-- Cada servicio crea **solo el bloque de su propio keyspace**, con `CREATE ... IF NOT EXISTS` (idempotente), al arrancar — vía `Cassandra/SchemaInitializer.cs` con retry por **Polly**.
-- RF=1, single-node — es entorno de desarrollo/demo, no producción (no afirmar lo contrario en informes).
+- 🔒 **Una base por servicio.** Ningún servicio lee ni escribe el keyspace de otro. Si necesita datos ajenos: REST (lectura) o evento (asíncrono). Nunca cross-keyspace queries.
+- 🔒 **Toda mutación que toque varias tablas desnormalizadas dentro del mismo servicio va en un `BATCH` de CQL.** Ej: crear un torneo escribe `torneos` + `torneos_por_videojuego` + `torneos_por_organizador` + `torneos_por_fecha` + `torneo_por_codigo` en un solo `BATCH`.
+- 🔒 **Cassandra es inmutable en la primary key.** No se hace `UPDATE` sobre partition/clustering keys. (Por eso se arreglaron Q7, Q22, Q23 con counters — ver `docs/02`.)
+- 🔒 **Las tablas de ranking/stats son read-models derivados.** Solo el servicio `ranking` las escribe, y solo consumiendo eventos. No tienen escritura pública.
+- 🔒 **Comunicación entre servicios:** lecturas síncronas vía `HttpClient` tipado (registrado con `AddHttpClient`), nunca `new HttpClient()`. Eventos vía MassTransit.
+- 🔒 **Namespaces:** `Esports.<Servicio>.Api` (PascalCase). Contratos compartidos en `Esports.Shared`.
+- 🔒 **Casing:** C# = PascalCase / `_camelCase` privados. Cassandra (keyspace/tabla/columna) = `snake_case`. Docker/carpetas/rutas = `kebab-case`/minúsculas. Ver `docs/03`.
+- 🔒 **Errores:** respuestas de error con `ProblemDetails` (RFC 7807). Nada de `throw` crudo hacia el cliente.
+- 🔒 **Config por variables de entorno** (las inyecta `docker-compose.yml`): `Cassandra__ContactPoints`, `Cassandra__Keyspace`, `RabbitMq__Host`, `Services__<Nombre>`.
+- 🔒 **Ruteo por primer segmento.** Cada prefijo `/api/<recurso>` mapea a UN solo servicio (ver `docs/04`). Una query que cruza dominios se expone bajo el prefijo del servicio **dueño de la tabla**, no anidada bajo otro recurso.
+- 🔒 **Line endings = LF.** El repo tiene `.gitattributes` que fuerza LF. No commitear CRLF (rompe scripts en contenedores Linux desde Windows).
+- 🔒 **Tablas counter de ranking: solo `UPDATE`, nunca `INSERT`.** La sintaxis es `UPDATE tabla SET col = col + 1 WHERE ...`. Cassandra crea la fila sola en el primer incremento. Mezclar INSERT con columnas counter es un error de CQL.
+- 🔒 **SchemaInitializer corre al iniciar** con retry vía Polly (Cassandra puede tardar en estar lista). Usa `CREATE KEYSPACE IF NOT EXISTS` y `CREATE TABLE IF NOT EXISTS` — idempotente, puede correr en cada arranque.
+- 🔒 **Commits en inglés, formato Conventional Commits.** Ver `docs/08-commits.md`. Ejemplos: `feat(teams): add players by country endpoint (Q3)`, `fix(ranking): increment counter via UPDATE`. El dominio del negocio (entidades, tablas, rutas) sigue en español.
 
-## Convenciones (resumen — detalle en `docs/03`)
+## 5. Estructura del repo
 
-- **Casing depende del contexto**: C# = `PascalCase` (clases/métodos/props) y `_camelCase` (campos privados); Cassandra/Docker/rutas REST = `snake-case`/`kebab-case` minúscula; eventos MassTransit = `PascalCase`; env vars = `PascalCase__Anidado`.
-- **Idioma**: dominio del negocio en **español** (`Torneo`, `Equipo`, `Jugador`, `Partida`, `Premio`, nombres de tablas/columnas/rutas). Capas técnicas en **inglés** (`Repository`, `Service`, `Controller`, `Dto`, `Consumer`, `Publisher`). Ej: `public class TorneoRepository`.
-- **Namespaces**: raíz `Esports`, patrón `Esports.<Servicio>.Api` (+ `.Controllers`, `.Domain`, `.Repositories`, `.Services`, `.Dtos`, `.Cassandra`, y `.Events`/`.Consumers` donde aplique). Contratos de eventos compartidos viven en `Esports.Shared.Events`.
-- **Estructura por servicio** (un proyecto por servicio, sin Clean Architecture multi-proyecto): `Controllers/`, `Domain/`, `Dtos/`, `Repositories/`, `Services/`, `Cassandra/` (+ `Events/` en tournaments, `Consumers/` en ranking).
-- **Código**: todo async (`...Async` → `Task`/`Task<T>`, nunca `.Result`/`.Wait()`); controllers delgados que delegan a Services; Repositories son la única capa que habla CQL (prepared statements, reuso); DTOs separados de Domain; ids `uuid`↔`Guid` generados server-side; fechas `timestamp`↔`DateTimeOffset` en UTC; errores como `ProblemDetails` (400/404/502/503); logging con `ILogger<T>` (nunca `Console.WriteLine`).
-- **Config**: `appsettings.json` + env vars (env gana). Secciones estándar: `Cassandra`, `RabbitMq`, `Services`. En Docker, las URLs de `Services__*` usan nombres de servicio de la red Docker (no `localhost`).
-- **Commits**: atómicos (un cambio lógico por commit) y **en inglés**, formato Conventional Commits (`type(scope): description`, ej. `feat(teams): add players by country endpoint (Q3)`). Detalle completo en `docs/08-commits.md`.
-
-## Eventos (RabbitMQ + MassTransit v8)
-
-⚠️ **Pinear `MassTransit.RabbitMQ` a `Version="8.*"` — NUNCA 9.x** (es comercial/de pago y rompe el build).
-
-Único evento requerido: `TeamRegisteredToTournament(Guid EquipoId, Guid TorneoId, string NombreEquipo, DateTimeOffset FechaInscripcion)` en `Esports.Shared.Events`. Publica `tournaments` al inscribir un equipo (después del BATCH); consume `ranking` para incrementar el counter `total_torneos`. Detalle completo y snippets en `docs/05-eventos.md`.
-
-## Comandos (una vez exista el código)
-
-```bash
-# Levantar toda la plataforma (Cassandra, RabbitMQ, los 4 servicios, gateway)
-docker compose up --build
-
-# Reset total (borra el volumen de Cassandra)
-docker compose down -v
-
-# Build de un proyecto individual
-dotnet build services/teams/Esports.Teams.Api
-
-# Correr un servicio fuera de Docker (apunta a localhost para Cassandra/RabbitMQ vía appsettings.Development.json)
-dotnet run --project services/teams/Esports.Teams.Api
-
-# Seed de datos de ejemplo (Fase 6)
-docker compose run --rm seeder
+```
+esports-platform/
+├── CLAUDE.md                  # este archivo
+├── USER-STORIES.md            # historias de usuario (entendimiento del producto)
+├── .gitattributes             # fuerza LF (cross-platform)
+├── .gitignore
+├── docker-compose.yml         # cassandra + rabbitmq + 4 servicios + gateway
+├── README.md                  # cómo levantar (para los compañeros)
+├── docs/                      # ← documentación que leen los agentes
+│   ├── 01-arquitectura.md
+│   ├── 02-modelo-datos.md
+│   ├── 03-convenciones.md
+│   ├── 04-contratos-api.md
+│   ├── 05-eventos.md
+│   ├── 06-docker-setup.md
+│   └── 07-plan-ejecucion.md
+├── shared/
+│   └── Esports.Shared/        # contratos de eventos + DTOs comunes
+├── services/
+│   ├── teams/Esports.Teams.Api/
+│   ├── tournaments/Esports.Tournaments.Api/
+│   ├── matches/Esports.Matches.Api/
+│   └── ranking/Esports.Ranking.Api/
+├── gateway/Esports.Gateway/
+└── tools/
+    └── Esports.Seeder/        # carga datos de ejemplo (opcional pero recomendado)
 ```
 
-URLs una vez levantado: gateway `http://localhost:8080`, Swagger por servicio `:5001`–`:5004/swagger`, RabbitMQ management `http://localhost:15672`.
+## 6. Comandos clave
 
-## Notas cross-platform (Mac/Windows)
+```bash
+docker compose up --build              # levantar todo el stack
+docker compose logs -f tournaments     # logs de un servicio
+docker compose exec tournaments bash   # entrar a un contenedor
+docker compose exec cassandra cqlsh    # consola CQL
+docker compose down                    # bajar (conserva datos)
+docker compose down -v                 # bajar y BORRAR la base (reset limpio)
+```
 
-- `.gitattributes` fuerza LF en `*.sh`, `*.cs`, `*.csproj`, `*.json`, `*.yml`, `Dockerfile`, etc. — crítico para que los contenedores Linux no fallen con CRLF de Windows.
-- Imágenes multi-arch (`cassandra:5.0`, `rabbitmq:3-management`, `dotnet/sdk:10.0`/`aspnet:10.0`) — sin emulación en Apple Silicon.
-- `DOTNET_USE_POLLING_FILE_WATCHER=1` necesario para hot reload confiable en bind mounts (especialmente Windows).
+> Todo corre en Docker. **No hay flujo de desarrollo local fuera de Docker** — el proyecto debe funcionar igual en macOS (Apple Silicon) y Windows con un solo `docker compose up --build`. Ver `docs/06-docker-setup.md`.
+
+URLs cuando está corriendo:
+- Gateway (lo que usa el frontend): `http://localhost:8080`
+- Swagger por servicio: `http://localhost:5001/swagger` … `5004`
+- RabbitMQ management: `http://localhost:15672` (user/pass: `guest`/`guest`)
+
+## 7. Definition of Done (proyecto completo)
+
+- [ ] `docker compose up --build` levanta los 4 servicios + gateway + cassandra + rabbitmq sin intervención manual.
+- [ ] Las 24 queries (Q1–Q24) están implementadas y devuelven datos correctos vía el gateway.
+- [ ] Los flujos de evento funcionan: inscribir un equipo incrementa su ranking de torneos (Q7) y el de sus jugadores (Q23); registrar una partida actualiza victorias (Q22) y estadísticas por torneo (Q24).
+- [ ] Cada servicio tiene Swagger funcional.
+- [ ] El seeder carga datos de ejemplo para que el frontend tenga con qué trabajar.
+- [ ] `README.md` explica cómo levantar el proyecto en Mac y en Windows.
+- [ ] Todo pusheado a GitHub (`LukeHowland`).

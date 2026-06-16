@@ -1,171 +1,170 @@
 # 04 — Contratos de API (REST)
 
-> Estos son los endpoints que el frontend va a consumir (vía el gateway) y que los servicios usan entre sí. Definir esto **antes** de implementar permite que el equipo de frontend arranque con mocks sin esperar al backend.
+> Endpoints que el frontend consume (vía el gateway) y que los servicios usan entre sí. Definir esto **antes** de implementar permite que el frontend arranque con mocks sin esperar al backend.
 
-## Convenciones de ruta
+## Convención de ruteo (clave con 24 endpoints)
 
-- Todas las rutas empiezan con `/api/`.
-- Recursos en plural y minúscula: `/api/torneos`, `/api/equipos`, `/api/partidas`.
-- El frontend pega **siempre al gateway** (`http://localhost:8080`). El gateway preserva el path y lo rutea al servicio correcto.
+Con tantas queries que cruzan dominios, el ruteo se vuelve un problema si anidamos recursos. La regla que lo resuelve:
 
-## Ruteo del Gateway (YARP)
+> **El primer segmento después de `/api/` decide el servicio, siempre.** Una query que cruza dominios se expone bajo el prefijo del servicio **dueño de la tabla**, nunca anidada bajo otro recurso.
 
-| Prefijo de ruta | Servicio destino |
+Así el gateway rutea por prefijo, sin ambigüedad ni reglas especiales:
+
+| Prefijo | Servicio |
 |---|---|
-| `/api/equipos/**`, `/api/jugadores/**` | `teams` |
-| `/api/torneos/**`, `/api/organizadores/**`, `/api/videojuegos/**`, `/api/inscripciones/**` | `tournaments` |
-| `/api/partidas/**` | `matches` |
-| `/api/ranking/**` | `ranking` |
+| `/api/jugadores/**` | teams |
+| `/api/equipos/**` | teams |
+| `/api/videojuegos/**` | tournaments |
+| `/api/organizadores/**` | tournaments |
+| `/api/torneos/**` | tournaments |
+| `/api/inscripciones/**` | tournaments |
+| `/api/premios/**` | tournaments |
+| `/api/partidas/**` | matches |
+| `/api/ranking/**` | ranking |
+| `/api/stats/**` | ranking |
 
-> Cuidado con un solapamiento: tanto Teams como Tournaments usan rutas que arrancan con `/api/equipos`. Para evitar choque, las consultas "torneos de un equipo" y "partidas de un equipo" van bajo sus propios prefijos (`/api/torneos/...` no aplica acá), así que se modelan como sub-recursos del lado correcto. Ver tabla por servicio: Q2 se expone como `/api/equipos/{id}/torneos` **en Tournaments**, y Q8 como `/api/equipos/{id}/partidas` **en Matches**. Para que YARP no se confunda, ruteamos por **segundo segmento**: `/api/equipos/{id}/torneos` → tournaments, `/api/equipos/{id}/partidas` → matches, `/api/equipos/**` (resto) → teams. (Detalle de config YARP en `docs/06`.)
+Ejemplo de la regla en acción: "torneos de un equipo" (Q14) NO va a `/api/equipos/{id}/torneos` (eso sería teams), va a `/api/torneos/por-equipo/{equipoId}` (la tabla `torneos_por_equipo` vive en tournaments). "Historial de un equipo" (Q17) va a `/api/partidas/por-equipo/{equipoId}` (matches).
 
-## Códigos de estado estándar
+## Códigos de estado
 
-- `200 OK` — lectura exitosa.
-- `201 Created` — recurso creado (devolver el recurso o su id).
-- `400 Bad Request` — input inválido.
-- `404 Not Found` — recurso no existe.
-- `502/503` — un servicio dependiente (REST) no respondió.
-- Errores con cuerpo `ProblemDetails`.
-
----
-
-## Teams (`/api/equipos`, `/api/jugadores`)
-
-### `POST /api/equipos`
-Crea un equipo. → escribe `equipos`.
-```jsonc
-// Request
-{ "nombre": "Tigres eSports", "pais": "Bolivia" }
-// Response 201
-{ "equipoId": "uuid", "nombre": "Tigres eSports", "pais": "Bolivia", "fechaCreacion": "2026-06-15T..." }
-```
-
-### `GET /api/equipos/{equipoId}`
-Trae un equipo por id (lo usa Tournaments por REST para el nombre). → lee `equipos`.
-```jsonc
-// Response 200
-{ "equipoId": "uuid", "nombre": "Tigres eSports", "pais": "Bolivia" }
-```
-
-### `POST /api/equipos/{equipoId}/jugadores`
-Agrega un jugador al equipo. → `BATCH` sobre `jugadores` + `jugadores_por_equipo` + `jugadores_por_pais`.
-```jsonc
-// Request
-{ "nombre": "Juan Perez", "nickname": "ElTigre", "email": "j@x.com", "pais": "Bolivia" }
-// Response 201
-{ "jugadorId": "uuid", "equipoId": "uuid", "nombre": "Juan Perez", "nickname": "ElTigre", "pais": "Bolivia" }
-```
-
-### `GET /api/equipos/{equipoId}/jugadores?pais={pais}` — **Q3**
-Jugadores de un equipo, opcionalmente filtrados por país. → lee `jugadores_por_equipo`.
-```jsonc
-// Response 200
-[ { "jugadorId": "uuid", "nombre": "Juan Perez", "nickname": "ElTigre", "pais": "Bolivia" } ]
-```
-
-### `GET /api/jugadores/por-pais/{pais}` — **Q10**
-Jugadores registrados en un país. → lee `jugadores_por_pais`.
-```jsonc
-// Response 200
-[ { "jugadorId": "uuid", "nombre": "Juan Perez", "nickname": "ElTigre", "nombreEquipo": "Tigres eSports" } ]
-```
+`200` lectura ok · `201` creado · `400` input inválido · `404` no existe · `502/503` dependencia REST caída · errores con cuerpo `ProblemDetails`.
 
 ---
 
-## Tournaments (`/api/torneos`, `/api/organizadores`, `/api/videojuegos`)
+## teams — `/api/jugadores`, `/api/equipos`
 
-### `POST /api/torneos`
-Crea un torneo. → `BATCH` sobre `torneos` + `torneos_por_organizador` + `torneos_por_videojuego`.
-```jsonc
-// Request
-{
-  "nombre": "Copa Santa Cruz 2026",
-  "organizadorId": "uuid", "nombreOrganizador": "Liga SCZ",
-  "videojuegoId": "uuid", "nombreVideojuego": "League of Legends",
-  "fechaInicio": "2026-07-01T18:00:00Z"
-}
-// Response 201
-{ "torneoId": "uuid", "nombre": "Copa Santa Cruz 2026", ... }
-```
+### Escritura
+- `POST /api/equipos` — crear equipo. → `BATCH` `equipos` + `equipos_por_fecha` + `equipos_por_tag`.
+  ```jsonc
+  { "nombre": "Tigres eSports", "tag": "TIG", "pais": "Bolivia" }
+  ```
+- `POST /api/equipos/{equipoId}/jugadores` — agregar jugador a un equipo. → `BATCH` `jugadores` + `jugadores_por_nickname` + `jugadores_por_pais` + `jugadores_por_equipo` + `integrantes_por_equipo`.
+  ```jsonc
+  { "nickname": "ElTigre", "nombre": "Juan Perez", "pais": "Bolivia", "rol": "Mid" }
+  ```
 
-### `GET /api/torneos/{torneoId}`
-Trae un torneo por id. → lee `torneos`.
-
-### `POST /api/torneos/{torneoId}/premios`
-Agrega un premio al torneo. → escribe `premios_por_torneo`.
-```jsonc
-// Request
-{ "monto": 5000.00, "tipo": "Primer lugar" }
-// Response 201
-{ "premioId": "uuid", "torneoId": "uuid", "monto": 5000.00, "tipo": "Primer lugar" }
-```
-
-### `GET /api/torneos/{torneoId}/premios` — **Q6**
-Premios de un torneo, mayor a menor monto. → lee `premios_por_torneo`.
-
-### `POST /api/torneos/{torneoId}/inscripciones`
-Inscribe un equipo en un torneo. → pide `nombre_equipo` a Teams (REST), hace `BATCH` sobre `equipos_por_torneo` + `torneos_por_equipo`, y **publica `TeamRegisteredToTournament`**.
-```jsonc
-// Request
-{ "equipoId": "uuid" }
-// Response 201
-{ "torneoId": "uuid", "equipoId": "uuid", "nombreEquipo": "Tigres eSports", "fechaInscripcion": "..." }
-```
-
-### `GET /api/torneos/{torneoId}/equipos` — **Q1**
-Equipos inscritos en un torneo. → lee `equipos_por_torneo`.
-
-### `GET /api/equipos/{equipoId}/torneos` — **Q2**
-Torneos de un equipo, más reciente primero. → lee `torneos_por_equipo`.
-
-### `GET /api/organizadores/{organizadorId}/torneos` — **Q5**
-Torneos de un organizador, más reciente primero. → lee `torneos_por_organizador`.
-
-### `GET /api/videojuegos/{videojuegoId}/torneos` — **Q7**
-Torneos de un videojuego, por fecha de inicio. → lee `torneos_por_videojuego`.
+### Lectura
+- `GET /api/jugadores/por-nickname/{nickname}` — **Q1**. → `jugadores_por_nickname`.
+- `GET /api/jugadores/por-pais/{pais}` — **Q2**. → `jugadores_por_pais`.
+- `GET /api/equipos/{equipoId}/jugadores?pais={pais}` — **Q3** (pais opcional). → `jugadores_por_equipo`.
+- `GET /api/equipos/por-fecha` — **Q4** (más reciente primero). → `equipos_por_fecha`.
+- `GET /api/equipos/por-tag/{tag}` — **Q5**. → `equipos_por_tag`.
+- `GET /api/equipos/{equipoId}/integrantes` — **Q6**. → `integrantes_por_equipo`.
+- `GET /api/equipos/{equipoId}` — equipo por id (lo usa tournaments por REST).
 
 ---
 
-## Matches (`/api/partidas`)
+## tournaments — `/api/videojuegos`, `/api/organizadores`, `/api/torneos`, `/api/premios`
 
-### `POST /api/partidas`
-Registra una partida. → `BATCH` sobre `partidas` + `partidas_por_torneo` + **dos filas** en `partidas_por_equipo` (local y visitante). Opcionalmente valida torneo/equipos vía REST.
-```jsonc
-// Request
-{
-  "torneoId": "uuid", "nombreTorneo": "Copa Santa Cruz 2026",
-  "fecha": "2026-07-02T20:00:00Z",
-  "equipoLocalId": "uuid", "nombreEquipoLocal": "Tigres eSports",
-  "equipoVisitanteId": "uuid", "nombreEquipoVisitante": "Pumas Gaming",
-  "resultado": "2-1"
-}
-// Response 201
-{ "partidaId": "uuid", ... }
-```
+### Escritura
+- `POST /api/videojuegos` — crear videojuego. → `BATCH` `videojuegos` + `videojuegos_por_genero`.
+  ```jsonc
+  { "nombre": "League of Legends", "genero": "MOBA" }
+  ```
+- `POST /api/organizadores` — crear organizador. → `BATCH` `organizadores` + `organizadores_lista`.
+  ```jsonc
+  { "nombre": "Liga Santa Cruz" }
+  ```
+- `POST /api/torneos` — crear torneo. → `BATCH` `torneos` + `torneos_por_videojuego` + `torneos_por_organizador` + `torneos_por_fecha` + `torneo_por_codigo`.
+  ```jsonc
+  {
+    "nombre": "Copa Santa Cruz 2026", "codigo": "CSC26",
+    "videojuegoId": "uuid", "organizadorId": "uuid",
+    "fechaInicio": "2026-07-01T18:00:00Z"
+  }
+  ```
+- `POST /api/torneos/{torneoId}/inscripciones` — inscribir equipo. → REST a teams (nombre + roster), `BATCH` `equipos_por_torneo` + `torneos_por_equipo`, **publica `TeamRegisteredToTournament`**.
+  ```jsonc
+  { "equipoId": "uuid" }
+  ```
+- `POST /api/torneos/{torneoId}/premios` — asignar premio (opcionalmente a un equipo ganador). → `BATCH` `premios_por_torneo` + `premios_por_equipo`.
+  ```jsonc
+  { "monto": 5000.00, "tipo": "Primer lugar", "equipoId": "uuid|null" }
+  ```
 
-### `GET /api/torneos/{torneoId}/partidas` — **Q4**
-Partidas de un torneo, cronológico (más reciente primero). → lee `partidas_por_torneo`.
-> Nota de ruteo: esta ruta empieza con `/api/torneos` pero su recurso final es `partidas`. Va a **Matches**. El gateway la rutea por el patrón `/api/torneos/{id}/partidas`.
-
-### `GET /api/equipos/{equipoId}/partidas` — **Q8**
-Historial de partidas de un equipo. → lee `partidas_por_equipo`.
+### Lectura
+- `GET /api/videojuegos/por-genero/{genero}` — **Q8**. → `videojuegos_por_genero`.
+- `GET /api/videojuegos/{videojuegoId}/torneos` — **Q9**. → `torneos_por_videojuego`.
+- `GET /api/organizadores` — **Q10**. → `organizadores_lista`.
+- `GET /api/organizadores/{organizadorId}/torneos` — **Q11**. → `torneos_por_organizador`.
+- `GET /api/torneos/por-fecha` — **Q12** (más reciente primero). → `torneos_por_fecha`.
+- `GET /api/torneos/{torneoId}/equipos` — **Q13**. → `equipos_por_torneo`.
+- `GET /api/torneos/por-equipo/{equipoId}` — **Q14**. → `torneos_por_equipo`.
+- `GET /api/torneos/por-codigo/{codigo}` — **Q15**. → `torneo_por_codigo`.
+- `GET /api/torneos/{torneoId}/premios` — **Q20** (mayor a menor monto). → `premios_por_torneo`.
+- `GET /api/premios/por-equipo/{equipoId}` — **Q21** (mayor a menor monto). → `premios_por_equipo`.
+- `GET /api/torneos/{torneoId}` — torneo por id.
 
 ---
 
-## Ranking (`/api/ranking`)
+## matches — `/api/partidas`
 
-### `GET /api/ranking/global?top={n}` — **Q9**
-Top-N de equipos por cantidad de torneos. → lee toda la partición `bucket='GLOBAL'` de `ranking_equipos_global` y ordena en el servicio.
-```jsonc
-// Response 200
-[ { "posicion": 1, "equipoId": "uuid", "totalTorneos": 12 },
-  { "posicion": 2, "equipoId": "uuid", "totalTorneos": 9 } ]
-```
-> El Ranking **no** expone POST/PUT públicos: se actualiza solo, consumiendo eventos.
+### Escritura
+- `POST /api/partidas` — registrar partida. → `BATCH` `partidas` + `partidas_por_torneo` + `partidas_por_equipo` (2 filas) + `partidas_por_fecha` + `partidas_por_rivales` (2 filas), **publica `MatchPlayed`**.
+  ```jsonc
+  {
+    "torneoId": "uuid", "nombreTorneo": "Copa Santa Cruz 2026",
+    "fecha": "2026-07-02T20:00:00Z",
+    "equipoLocalId": "uuid", "nombreLocal": "Tigres eSports",
+    "equipoVisitanteId": "uuid", "nombreVisitante": "Pumas Gaming",
+    "equipoGanadorId": "uuid", "resultado": "2-1"
+  }
+  ```
+
+### Lectura
+- `GET /api/partidas/por-torneo/{torneoId}` — **Q16** (cronológico). → `partidas_por_torneo`.
+- `GET /api/partidas/por-equipo/{equipoId}` — **Q17**. → `partidas_por_equipo`.
+- `GET /api/partidas/por-fecha/{dia}` — **Q18** (`dia` = `YYYY-MM-DD`). → `partidas_por_fecha`.
+- `GET /api/partidas/entre/{equipoId}/{rivalId}` — **Q19** (enfrentamientos directos, ambos sentidos). → `partidas_por_rivales`.
+
+---
+
+## ranking — `/api/ranking`, `/api/stats` (solo lectura)
+
+> No expone POST/PUT: se actualiza consumiendo eventos.
+
+- `GET /api/ranking/equipos?top={n}` — **Q7** (Top-N por torneos). → `ranking_equipos_global`, ordenado en el servicio.
+  ```jsonc
+  [ { "posicion": 1, "equipoId": "uuid", "totalTorneos": 12 } ]
+  ```
+- `GET /api/ranking/victorias?top={n}` — **Q22** (Top-N por victorias). → `ranking_victorias`.
+- `GET /api/ranking/jugadores?top={n}` — **Q23** (jugadores más activos). → `ranking_jugadores_activos`.
+- `GET /api/stats/equipo/{equipoId}/torneo/{torneoId}` — **Q24**. → `stats_equipo_por_torneo`.
+  ```jsonc
+  { "equipoId": "uuid", "torneoId": "uuid", "victorias": 4, "derrotas": 1, "partidasJugadas": 5 }
+  ```
 
 ---
 
 ## Swagger
 
-Cada servicio expone Swagger UI en `/swagger`. El gateway puede opcionalmente agregar los Swaggers, pero para la demo alcanza con que el frontend tenga las URLs de Swagger de cada servicio (5001–5004) más la colección de endpoints de arriba.
+Cada servicio expone Swagger UI en `/swagger` (`:5001`–`:5004`). Para el frontend alcanza con esas URLs + esta lista de endpoints. El gateway puede opcionalmente agregar los Swaggers, pero no es necesario para la demo.
+
+## Resumen rápido: query → endpoint
+
+| Q | Endpoint |
+|---|---|
+| Q1 | `GET /api/jugadores/por-nickname/{nickname}` |
+| Q2 | `GET /api/jugadores/por-pais/{pais}` |
+| Q3 | `GET /api/equipos/{id}/jugadores?pais=` |
+| Q4 | `GET /api/equipos/por-fecha` |
+| Q5 | `GET /api/equipos/por-tag/{tag}` |
+| Q6 | `GET /api/equipos/{id}/integrantes` |
+| Q7 | `GET /api/ranking/equipos?top=` |
+| Q8 | `GET /api/videojuegos/por-genero/{genero}` |
+| Q9 | `GET /api/videojuegos/{id}/torneos` |
+| Q10 | `GET /api/organizadores` |
+| Q11 | `GET /api/organizadores/{id}/torneos` |
+| Q12 | `GET /api/torneos/por-fecha` |
+| Q13 | `GET /api/torneos/{id}/equipos` |
+| Q14 | `GET /api/torneos/por-equipo/{id}` |
+| Q15 | `GET /api/torneos/por-codigo/{codigo}` |
+| Q16 | `GET /api/partidas/por-torneo/{id}` |
+| Q17 | `GET /api/partidas/por-equipo/{id}` |
+| Q18 | `GET /api/partidas/por-fecha/{dia}` |
+| Q19 | `GET /api/partidas/entre/{id}/{rivalId}` |
+| Q20 | `GET /api/torneos/{id}/premios` |
+| Q21 | `GET /api/premios/por-equipo/{id}` |
+| Q22 | `GET /api/ranking/victorias?top=` |
+| Q23 | `GET /api/ranking/jugadores?top=` |
+| Q24 | `GET /api/stats/equipo/{id}/torneo/{id}` |

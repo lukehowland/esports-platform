@@ -6,18 +6,16 @@
 
 - **Docker Desktop** instalado.
   - Mac (M-series): nativo ARM, no necesita nada extra.
-  - Windows: usar el **backend WSL2** (es el default de Docker Desktop). Habilitar el sharing del disco donde esté el repo.
+  - Windows: usar el **backend WSL2** (default de Docker Desktop). Habilitar el sharing del disco donde esté el repo.
 - ~6 GB de RAM libres para Docker (Cassandra + RabbitMQ + 5 contenedores .NET).
 
 ## Por qué funciona igual en Mac y Windows
 
-- Las imágenes base son **multi-arch**: `cassandra:5.0`, `rabbitmq:3-management`, `mcr.microsoft.com/dotnet/sdk:10.0` y `aspnet:10.0` traen variantes `linux/arm64` (Mac) y `linux/amd64` (Windows). Docker baja la correcta automáticamente. **No emulación, no Rosetta.**
-- Todo corre dentro de contenedores **Linux** en ambos sistemas, así que el comportamiento es idéntico.
-- El único riesgo real cross-platform son los **fin de línea (CRLF vs LF)**: lo resolvemos con `.gitattributes` (abajo).
+- Imágenes base **multi-arch**: `cassandra:5.0`, `rabbitmq:3-management`, `mcr.microsoft.com/dotnet/sdk:10.0` y `aspnet:10.0` traen variantes `linux/arm64` (Mac) y `linux/amd64` (Windows). Docker baja la correcta automáticamente. **No emulación, no Rosetta.**
+- Todo corre dentro de contenedores **Linux** en ambos sistemas → comportamiento idéntico.
+- El único riesgo real cross-platform son los **fin de línea (CRLF vs LF)**: lo resolvemos con `.gitattributes`.
 
 ## `.gitattributes` (CRÍTICO — crear en la raíz)
-
-Si un compañero en Windows hace commit con CRLF, los scripts y a veces los configs fallan dentro de los contenedores Linux. Esto lo previene forzando LF:
 
 ```gitattributes
 * text=auto eol=lf
@@ -43,7 +41,7 @@ services:
     ports: ["9042:9042"]
     environment:
       CASSANDRA_CLUSTER_NAME: esports-cluster
-      MAX_HEAP_SIZE: 512M       # límite modesto para laptops
+      MAX_HEAP_SIZE: 512M
       HEAP_NEWSIZE: 128M
     volumes:
       - cassandra-data:/var/lib/cassandra
@@ -52,7 +50,7 @@ services:
       interval: 15s
       timeout: 10s
       retries: 12
-      start_period: 90s          # Cassandra tarda en arrancar
+      start_period: 90s
     networks: [esports-net]
 
   rabbitmq:
@@ -73,11 +71,11 @@ services:
     environment:
       ASPNETCORE_ENVIRONMENT: Development
       ASPNETCORE_URLS: http://0.0.0.0:8080
-      DOTNET_USE_POLLING_FILE_WATCHER: "1"   # hot reload confiable en bind mounts
+      DOTNET_USE_POLLING_FILE_WATCHER: "1"
       Cassandra__ContactPoints: cassandra
       Cassandra__Keyspace: esports_teams
     volumes: ["./services/teams/Esports.Teams.Api:/src"]
-    ports: ["5002:8080"]
+    ports: ["5001:8080"]
     depends_on:
       cassandra: { condition: service_healthy }
     networks: [esports-net]
@@ -94,7 +92,7 @@ services:
       RabbitMq__Host: rabbitmq
       Services__Teams: http://teams:8080
     volumes: ["./services/tournaments/Esports.Tournaments.Api:/src"]
-    ports: ["5001:8080"]
+    ports: ["5002:8080"]
     depends_on:
       cassandra: { condition: service_healthy }
       rabbitmq:  { condition: service_healthy }
@@ -109,12 +107,14 @@ services:
       DOTNET_USE_POLLING_FILE_WATCHER: "1"
       Cassandra__ContactPoints: cassandra
       Cassandra__Keyspace: esports_matches
+      RabbitMq__Host: rabbitmq
       Services__Teams: http://teams:8080
       Services__Tournaments: http://tournaments:8080
     volumes: ["./services/matches/Esports.Matches.Api:/src"]
     ports: ["5003:8080"]
     depends_on:
       cassandra: { condition: service_healthy }
+      rabbitmq:  { condition: service_healthy }
     networks: [esports-net]
 
   ranking:
@@ -151,13 +151,11 @@ networks:
   esports-net:
 ```
 
-> Nota: no se pone `version:` arriba — está obsoleto en Docker Compose v2. Usar `docker compose` (con espacio), no `docker-compose`.
-
-> ⚠️ Si MassTransit no se conecta porque RabbitMQ todavía está iniciando, el servicio reintenta solo (MassTransit hace retry de conexión). El `depends_on: service_healthy` ya minimiza esto.
+> No se pone `version:` arriba (obsoleto en Compose v2). Usar `docker compose` (con espacio), no `docker-compose`. Si MassTransit no conecta porque RabbitMQ aún inicia, el servicio reintenta solo; el `depends_on: service_healthy` lo minimiza.
 
 ## `Dockerfile` por servicio (multi-stage: dev + runtime)
 
-Mismo patrón para los 5 (cambiando el nombre del `.dll` en el stage runtime):
+Mismo patrón para los 5 (cambiar solo el nombre del `.dll` en el stage runtime):
 
 ```dockerfile
 # ---- dev: hot reload con dotnet watch ----
@@ -178,7 +176,7 @@ RUN dotnet restore
 COPY . ./
 RUN dotnet publish -c Release -o /app
 
-# ---- runtime (imagen liviana, para "modo producción") ----
+# ---- runtime ----
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime
 WORKDIR /app
 COPY --from=build /app ./
@@ -186,38 +184,32 @@ EXPOSE 8080
 ENTRYPOINT ["dotnet", "Esports.Teams.Api.dll"]   # ajustar por servicio
 ```
 
-Si el `.csproj` referencia a `Esports.Shared`, el `context` del build debe incluirlo (o copiar `shared/` dentro). Alternativa simple: que cada servicio referencie `Esports.Shared` por ruta relativa y ampliar el `context` a la raíz del repo, ajustando los `COPY`. Los agentes deben resolver esto al armar el primer Dockerfile y dejarlo documentado.
+> Como cada servicio referencia `Esports.Shared`, hay dos opciones para el build: (a) ampliar el `context` a la raíz del repo y ajustar los `COPY` para incluir `shared/`, o (b) empaquetar `Esports.Shared` como dependencia local. El agente debe resolverlo al armar el primer Dockerfile (Fase 1) y dejarlo documentado para que los demás copien el patrón.
 
 ## Bootstrap de Cassandra (crear keyspace + tablas al arrancar)
 
-Cada servicio, al iniciar, debe crear su keyspace y tablas de forma **idempotente** (con reintentos, porque Cassandra puede tardar en aceptar conexiones aun después del healthcheck). Patrón en `Cassandra/SchemaInitializer.cs`, ejecutado antes de `app.Run()`:
+Cada servicio, al iniciar, crea su keyspace y tablas de forma **idempotente** (con reintentos, porque Cassandra puede tardar en aceptar conexiones aun después del healthcheck). Patrón en `Cassandra/SchemaInitializer.cs`, antes de `app.Run()`:
 
 ```csharp
-// 1) Conectar al cluster SIN keyspace (con retry/Polly).
+// 1) Conectar al cluster SIN keyspace (envuelto en retry con Polly: ~10 intentos, backoff 5s).
 // 2) session.Execute("CREATE KEYSPACE IF NOT EXISTS ... RF=1");
 // 3) session.ChangeKeyspace("esports_teams");
-// 4) session.Execute(cada CREATE TABLE IF NOT EXISTS ...);  // ver docs/02
+// 4) session.Execute(cada CREATE TABLE IF NOT EXISTS ...);   // ver docs/02
 ```
-
-Usar **Polly** para envolver el connect en un retry (ej. 10 intentos, backoff de 5s). Así si Cassandra todavía no acepta queries, el servicio espera en vez de morir.
 
 ## Cómo correr
 
 ```bash
 # Mac y Windows: lo mismo, desde la raíz del repo
 docker compose up --build
-
-# La primera vez tarda (baja imágenes + Cassandra arranca ~1-2 min).
-# Cuando veas los servicios escuchando en :8080, está listo.
 ```
-
-Luego: gateway en `http://localhost:8080`, Swagger en `5001`–`5004`, RabbitMQ en `http://localhost:15672`.
+La primera vez tarda (baja imágenes + Cassandra arranca ~1-2 min). Cuando los servicios escuchen en `:8080`, está listo. Luego: gateway en `http://localhost:8080`, Swagger en `5001`–`5004`, RabbitMQ en `http://localhost:15672`.
 
 ## Troubleshooting
 
-- **"Cassandra unhealthy" o servicios reiniciando al inicio**: normal los primeros ~90s; Cassandra es lenta para arrancar. El `start_period` lo cubre. Si persiste, subí RAM de Docker Desktop.
-- **Puerto ocupado (8080/9042/5672)**: cerrá lo que lo use o cambiá el mapeo `host:contenedor` en el compose.
-- **Windows: cambios de código no recargan**: confirmá `DOTNET_USE_POLLING_FILE_WATCHER=1` (ya está en el compose) y que el repo esté en una ruta compartida con Docker (idealmente dentro de WSL2 o en una unidad habilitada).
-- **Windows: scripts/Dockerfile fallan raro**: casi siempre es CRLF. Verificá que `.gitattributes` esté commiteado y volvé a clonar, o corré `git add --renormalize .`.
-- **Reset total de la base**: `docker compose down -v` (borra el volumen `cassandra-data`).
-- **MassTransit pide licencia / error de versión**: te coló la v9. Forzá `Version="8.*"` en el `.csproj` y `dotnet restore`.
+- **"Cassandra unhealthy" / servicios reiniciando al inicio**: normal los primeros ~90s; Cassandra es lenta. El `start_period` lo cubre. Si persiste, subí RAM de Docker Desktop.
+- **Puerto ocupado (8080/9042/5672/5001-5004)**: cerrá lo que lo use o cambiá el mapeo `host:contenedor`.
+- **Windows: cambios de código no recargan**: confirmá `DOTNET_USE_POLLING_FILE_WATCHER=1` (ya está) y que el repo esté en ruta compartida con Docker (idealmente dentro de WSL2).
+- **Windows: scripts/Dockerfile fallan raro**: casi siempre es CRLF. Verificá `.gitattributes` commiteado; volvé a clonar o corré `git add --renormalize .`.
+- **Reset total de la base**: `docker compose down -v`.
+- **MassTransit pide licencia / error de versión**: te coló la v9. Forzá `Version="8.*"` y `dotnet restore`.

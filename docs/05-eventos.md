@@ -2,47 +2,53 @@
 
 ## Por qué eventos
 
-REST sirve cuando un servicio necesita un dato de otro **ahora**. Pero para *reaccionar* a un hecho sin acoplar productor y consumidor, se usan eventos. Ventajas que demuestra esto en la materia: **desacople** (Tournaments no sabe que existe Ranking), **consistencia eventual** (el ranking se actualiza poco después, no en la misma transacción) y **extensibilidad** (mañana otro servicio se suscribe al mismo evento sin tocar a Tournaments).
+REST sirve cuando un servicio necesita un dato de otro **ahora**. Pero para *reaccionar* a un hecho sin acoplar productor y consumidor, se usan eventos. Conceptos que demuestra en la materia: **desacople** (Tournaments y Matches no saben que existe Ranking), **consistencia eventual** (los rankings/stats se actualizan poco después, no en la misma transacción) y **CQRS** (Ranking es un read-model agregado, alimentado por eventos).
 
 ## Broker y librería
 
-- Broker: **RabbitMQ** (imagen `rabbitmq:3-management`, UI en `:15672`).
-- Librería: **MassTransit 8.x** con el transporte RabbitMQ.
-  - ⚠️ **Pinear `Version="8.*"`**. NO instalar 9.x (comercial, requiere licencia de pago y rompería el build).
+- Broker: **RabbitMQ** (imagen `rabbitmq:3-management`, UI en `:15672`, `guest`/`guest`).
+- Librería: **MassTransit 8.x** con transporte RabbitMQ.
+  - ⚠️ **Pinear `Version="8.*"`**. NO instalar 9.x (comercial, requiere licencia de pago, rompería el build).
   - Paquete: `MassTransit.RabbitMQ`.
-- MassTransit se encarga de declarar exchanges y colas automáticamente a partir de los tipos de mensaje y los consumers registrados. No hay que crear colas a mano.
+- MassTransit declara exchanges y colas automáticamente a partir de los tipos de mensaje y los consumers registrados. No hay que crear colas a mano.
 
 ## Contratos de evento (en `Esports.Shared.Events`)
 
-Los eventos son `record` inmutables compartidos por productor y consumidor. Viven en el proyecto `Esports.Shared` para que ambos referencien el mismo tipo.
+`record` inmutables compartidos por productor y consumidor (ambos referencian el mismo tipo desde `Esports.Shared`).
 
 ```csharp
 namespace Esports.Shared.Events;
 
-// Obligatorio: dispara la actualización del ranking
+// Publicado por Tournaments al inscribir un equipo en un torneo.
+// jugadorIds lleva el roster del equipo en ese momento (event-carried state transfer)
+// para que Ranking pueda actualizar Q23 sin un REST extra.
 public record TeamRegisteredToTournament(
     Guid EquipoId,
     Guid TorneoId,
     string NombreEquipo,
+    IReadOnlyList<Guid> JugadorIds,
     DateTimeOffset FechaInscripcion);
+
+// Publicado por Matches al registrar una partida.
+public record MatchPlayed(
+    Guid PartidaId,
+    Guid TorneoId,
+    Guid EquipoLocalId,
+    Guid EquipoVisitanteId,
+    Guid EquipoGanadorId,
+    DateTimeOffset Fecha);
 ```
 
 ### Catálogo
 
-| Evento | Publica | Consume | Efecto |
+| Evento | Publica | Consume | Efecto en Ranking |
 |---|---|---|---|
-| `TeamRegisteredToTournament` | Tournaments (al inscribir un equipo) | Ranking | `total_torneos += 1` para ese equipo en `ranking_equipos_global` |
+| `TeamRegisteredToTournament` | tournaments (al inscribir) | ranking | `ranking_equipos_global.total_torneos += 1` del equipo (Q7); `ranking_jugadores_activos.total_torneos += 1` por cada `jugadorId` del roster (Q23) |
+| `MatchPlayed` | matches (al registrar partida) | ranking | `ranking_victorias.total_victorias += 1` del ganador (Q22); en `stats_equipo_por_torneo`: ganador `victorias+1, partidas_jugadas+1` y perdedor `derrotas+1, partidas_jugadas+1` (Q24) |
 
-**Eventos opcionales** (solo si sobra tiempo — no son necesarios para la nota):
+> Estos dos eventos alimentan las 4 tablas del servicio ranking. Es el núcleo event-driven del proyecto.
 
-| Evento | Publica | Consume | Efecto |
-|---|---|---|---|
-| `TeamCreated(EquipoId, Nombre, Pais)` | Teams | Ranking | crear la fila del equipo en el ranking con total en 0 (si no se prefiere crearla lazy al primer incremento) |
-| `TeamRenamed(EquipoId, NuevoNombre)` | Teams | Tournaments/Matches | refrescar `nombre_equipo` desnormalizado |
-
-> Para el alcance del miércoles: implementar **solo `TeamRegisteredToTournament`**. Es suficiente para demostrar arquitectura event-driven de punta a punta.
-
-## Publisher (Tournaments)
+## Publisher (ejemplo: Tournaments)
 
 Registro en `Program.cs`:
 ```csharp
@@ -59,14 +65,16 @@ builder.Services.AddMassTransit(x =>
     });
 });
 ```
-Publicar dentro del flujo de inscripción (después del `BATCH` exitoso):
+Publicar dentro del flujo de inscripción, después del `BATCH` exitoso:
 ```csharp
 await _publishEndpoint.Publish(new TeamRegisteredToTournament(
-    equipoId, torneoId, nombreEquipo, DateTimeOffset.UtcNow));
+    equipoId, torneoId, nombreEquipo, jugadorIds, DateTimeOffset.UtcNow));
 ```
+Matches hace lo mismo con `MatchPlayed` después de registrar la partida.
 
 ## Consumer (Ranking)
 
+Dos consumers, uno por evento. Ejemplo del de inscripción:
 ```csharp
 public class TeamRegisteredConsumer : IConsumer<TeamRegisteredToTournament>
 {
@@ -78,17 +86,22 @@ public class TeamRegisteredConsumer : IConsumer<TeamRegisteredToTournament>
 
     public async Task Consume(ConsumeContext<TeamRegisteredToTournament> ctx)
     {
-        var msg = ctx.Message;
-        await _repo.IncrementarTotalTorneosAsync("GLOBAL", msg.EquipoId);
-        _logger.LogInformation("Ranking++ equipo {EquipoId}", msg.EquipoId);
+        var m = ctx.Message;
+        await _repo.IncrementarTorneosEquipoAsync("GLOBAL", m.EquipoId);          // Q7
+        foreach (var jugadorId in m.JugadorIds)
+            await _repo.IncrementarTorneosJugadorAsync("GLOBAL", jugadorId);      // Q23
+        _logger.LogInformation("Ranking torneos++ equipo {EquipoId} (+{N} jugadores)", m.EquipoId, m.JugadorIds.Count);
     }
 }
 ```
+El de partidas (`MatchPlayedConsumer`) incrementa victorias del ganador (Q22) y actualiza las stats de ambos equipos en el torneo (Q24).
+
 Registro en `Program.cs` del Ranking:
 ```csharp
 builder.Services.AddMassTransit(x =>
 {
     x.AddConsumer<TeamRegisteredConsumer>();
+    x.AddConsumer<MatchPlayedConsumer>();
     x.UsingRabbitMq((context, cfg) =>
     {
         cfg.Host(builder.Configuration["RabbitMq:Host"], h => { h.Username("guest"); h.Password("guest"); });
@@ -96,20 +109,25 @@ builder.Services.AddMassTransit(x =>
     });
 });
 ```
-Repo del Ranking (counter, por eso es idempotente-ish y atómico):
+Repo del Ranking (todo con counters, atómico):
 ```csharp
-// UPDATE ranking_equipos_global SET total_torneos = total_torneos + 1
-// WHERE bucket = ? AND equipo_id = ?;
+// UPDATE ranking_equipos_global    SET total_torneos   = total_torneos   + 1 WHERE bucket=? AND equipo_id=?;
+// UPDATE ranking_jugadores_activos SET total_torneos   = total_torneos   + 1 WHERE bucket=? AND jugador_id=?;
+// UPDATE ranking_victorias         SET total_victorias = total_victorias + 1 WHERE bucket=? AND equipo_id=?;
+// UPDATE stats_equipo_por_torneo   SET victorias = victorias + 1, partidas_jugadas = partidas_jugadas + 1 WHERE equipo_id=? AND torneo_id=?;
+// UPDATE stats_equipo_por_torneo   SET derrotas  = derrotas  + 1, partidas_jugadas = partidas_jugadas + 1 WHERE equipo_id=? AND torneo_id=?;
 ```
 
 ## Idempotencia y orden
 
-- El counter (`total_torneos + 1`) es atómico en Cassandra. Si el mismo evento se entrega dos veces (RabbitMQ garantiza *at-least-once*), el conteo podría inflarse. Para una demo es aceptable. Si quieren robustez extra (opcional): guardar los `inscripcion_id` ya procesados y saltar duplicados, o modelar la inscripción como insert idempotente y derivar el total con `COUNT` bajo demanda.
-- El orden entre eventos distintos no está garantizado, pero acá solo hay un tipo de evento que incrementa, así que no importa.
+- Los counters (`+ 1`) son atómicos en Cassandra. RabbitMQ entrega *at-least-once*: si un evento se reentrega, el counter podría inflarse. Para una demo es aceptable.
+- Mitigación opcional (si sobra tiempo): guardar los `partida_id`/`inscripcion_id` ya procesados en una tabla `eventos_procesados` y saltar duplicados en el consumer.
+- No dependemos del orden entre eventos distintos: cada uno incrementa un counter independiente.
 
 ## Verificación rápida (smoke test del evento)
 
-1. Crear un equipo (`POST /api/equipos`) y un torneo (`POST /api/torneos`).
+1. Crear equipo con 2-3 jugadores, y un torneo.
 2. Inscribir el equipo (`POST /api/torneos/{id}/inscripciones`).
-3. En RabbitMQ management (`:15672`) ver que pasó un mensaje por la cola del consumer.
-4. `GET /api/ranking/global?top=10` → el equipo aparece con `totalTorneos` ≥ 1.
+3. En RabbitMQ (`:15672`) ver que pasó el mensaje.
+4. `GET /api/ranking/equipos?top=10` → el equipo aparece con `totalTorneos ≥ 1`; `GET /api/ranking/jugadores?top=10` → sus jugadores aparecen.
+5. Registrar una partida con ganador → `GET /api/ranking/victorias?top=10` y `GET /api/stats/equipo/{id}/torneo/{id}` reflejan el resultado.

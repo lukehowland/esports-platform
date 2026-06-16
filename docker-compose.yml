@@ -1,0 +1,201 @@
+services:
+  cassandra:
+    image: cassandra:5.0
+    container_name: esports-cassandra
+    ports:
+      - "9042:9042"
+    environment:
+      CASSANDRA_CLUSTER_NAME: esports-cluster
+      MAX_HEAP_SIZE: 512M
+      HEAP_NEWSIZE: 128M
+    volumes:
+      - cassandra-data:/var/lib/cassandra
+    healthcheck:
+      test: ["CMD-SHELL", "cqlsh -e 'describe keyspaces' || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 12
+      start_period: 90s
+    networks:
+      - esports-net
+
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: esports-rabbitmq
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 15s
+      timeout: 10s
+      retries: 8
+      start_period: 30s
+    networks:
+      - esports-net
+
+  teams:
+    build:
+      context: .
+      dockerfile: services/teams/Esports.Teams.Api/Dockerfile
+    container_name: esports-teams
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      ASPNETCORE_URLS: http://0.0.0.0:8080
+      Cassandra__ContactPoints: cassandra
+      Cassandra__Port: "9042"
+      Cassandra__Keyspace: esports_teams
+    ports:
+      - "5001:8080"
+    depends_on:
+      cassandra:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    networks:
+      - esports-net
+
+  tournaments:
+    build:
+      context: .
+      dockerfile: services/tournaments/Esports.Tournaments.Api/Dockerfile
+    container_name: esports-tournaments
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      ASPNETCORE_URLS: http://0.0.0.0:8080
+      Cassandra__ContactPoints: cassandra
+      Cassandra__Port: "9042"
+      Cassandra__Keyspace: esports_tournaments
+      RabbitMq__Host: rabbitmq
+      RabbitMq__Username: guest
+      RabbitMq__Password: guest
+      Services__Teams: http://teams:8080
+    ports:
+      - "5002:8080"
+    depends_on:
+      cassandra:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      teams:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    networks:
+      - esports-net
+
+  matches:
+    build:
+      context: .
+      dockerfile: services/matches/Esports.Matches.Api/Dockerfile
+    container_name: esports-matches
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      ASPNETCORE_URLS: http://0.0.0.0:8080
+      Cassandra__ContactPoints: cassandra
+      Cassandra__Port: "9042"
+      Cassandra__Keyspace: esports_matches
+      RabbitMq__Host: rabbitmq
+      RabbitMq__Username: guest
+      RabbitMq__Password: guest
+    ports:
+      - "5003:8080"
+    depends_on:
+      cassandra:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    networks:
+      - esports-net
+
+  ranking:
+    build:
+      context: .
+      dockerfile: services/ranking/Esports.Ranking.Api/Dockerfile
+    container_name: esports-ranking
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      ASPNETCORE_URLS: http://0.0.0.0:8080
+      Cassandra__ContactPoints: cassandra
+      Cassandra__Port: "9042"
+      Cassandra__Keyspace: esports_ranking
+      RabbitMq__Host: rabbitmq
+      RabbitMq__Username: guest
+      RabbitMq__Password: guest
+    ports:
+      - "5004:8080"
+    depends_on:
+      cassandra:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    networks:
+      - esports-net
+
+  gateway:
+    build:
+      context: .
+      dockerfile: gateway/Esports.Gateway/Dockerfile
+    container_name: esports-gateway
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      ASPNETCORE_URLS: http://0.0.0.0:8080
+      Services__Teams: http://teams:8080
+      Services__Tournaments: http://tournaments:8080
+      Services__Matches: http://matches:8080
+      Services__Ranking: http://ranking:8080
+    ports:
+      - "8080:8080"
+    depends_on:
+      teams:
+        condition: service_healthy
+      tournaments:
+        condition: service_healthy
+      matches:
+        condition: service_healthy
+      ranking:
+        condition: service_healthy
+    networks:
+      - esports-net
+
+  seeder:
+    build:
+      context: .
+      dockerfile: tools/Esports.Seeder/Dockerfile
+    container_name: esports-seeder
+    environment:
+      GatewayUrl: http://gateway:8080
+    depends_on:
+      gateway:
+        condition: service_started
+    networks:
+      - esports-net
+    profiles:
+      - seed
+
+volumes:
+  cassandra-data:
+
+networks:
+  esports-net:
+    driver: bridge

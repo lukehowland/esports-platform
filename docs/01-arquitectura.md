@@ -2,99 +2,109 @@
 
 ## Visión general
 
-La plataforma es un sistema distribuido de microservicios. Cada servicio es dueño de su propio dominio y su propia base de datos (keyspace de Cassandra). Se comunican entre sí de dos formas: **REST síncrono** (cuando un servicio necesita un dato de otro en el momento) y **eventos asíncronos por RabbitMQ** (cuando un servicio necesita reaccionar a algo que pasó en otro, sin acoplarse). Un **API Gateway** (YARP) expone una sola URL pública.
+La plataforma es un sistema distribuido de microservicios. Cada servicio es dueño de su propio dominio y su propia base de datos (keyspace de Cassandra). Se comunican de dos formas: **REST síncrono** (cuando un servicio necesita un dato de otro en el momento) y **eventos asíncronos por RabbitMQ** (cuando un servicio necesita reaccionar a algo que pasó en otro, sin acoplarse). Un **API Gateway** (YARP) expone una sola URL pública.
+
+El modelo Chebotko tiene 24 tablas (Q1–Q24) repartidas en 4 servicios según su dominio.
 
 ```mermaid
 flowchart TB
     FE[Frontend / Cliente] -->|HTTP| GW[API Gateway :8080<br/>YARP]
 
-    GW -->|/api/torneos, /api/inscripciones...| T[Tournaments :8080]
-    GW -->|/api/equipos, /api/jugadores...| TE[Teams :8080]
-    GW -->|/api/partidas...| M[Matches :8080]
-    GW -->|/api/ranking...| R[Ranking :8080]
+    GW -->|/api/jugadores, /api/equipos| TE[teams :8080<br/>Q1-Q6]
+    GW -->|/api/videojuegos, /api/organizadores,<br/>/api/torneos, /api/inscripciones, /api/premios| T[tournaments :8080<br/>Q8-Q15, Q20, Q21]
+    GW -->|/api/partidas| M[matches :8080<br/>Q16-Q19]
+    GW -->|/api/ranking, /api/stats| R[ranking :8080<br/>Q7, Q22, Q23, Q24]
 
-    T -->|REST: pedir nombre_equipo| TE
-    M -->|REST: validar equipo/torneo| TE
-    M -->|REST: validar torneo| T
+    T -->|REST: nombre + roster del equipo| TE
+    M -.->|REST opcional: validar equipo/torneo| TE
+    M -.->|REST opcional: validar torneo| T
 
     T -.->|evento TeamRegisteredToTournament| MQ[(RabbitMQ)]
-    MQ -.->|consume| R
+    M -.->|evento MatchPlayed| MQ
+    MQ -.->|consume ambos| R
 
-    T --> CT[(esports_tournaments)]
     TE --> CTE[(esports_teams)]
+    T --> CT[(esports_tournaments)]
     M --> CM[(esports_matches)]
     R --> CR[(esports_ranking)]
 ```
 
-> Si tu visor no renderiza Mermaid: el frontend habla solo con el Gateway; el Gateway rutea a los 4 servicios; los servicios se piden datos por REST entre ellos; Tournaments publica un evento a RabbitMQ que Ranking consume; cada servicio tiene su propio keyspace.
+> Si tu visor no renderiza Mermaid: el frontend habla solo con el Gateway; el Gateway rutea a los 4 servicios; Tournaments le pide a Teams el nombre y roster del equipo por REST al inscribir; Tournaments y Matches publican eventos a RabbitMQ que Ranking consume para mantener rankings y estadísticas; cada servicio tiene su propio keyspace.
 
 ## Los servicios y sus fronteras
 
-### Tournaments (`esports_tournaments`)
-Es el servicio más pesado. Dueño de torneos, premios y, sobre todo, de las **inscripciones** (la relación equipo↔torneo, que en Chebotko vive desnormalizada en dos tablas: `equipos_por_torneo` y `torneos_por_equipo`). Cuando un equipo se inscribe, este servicio escribe ambas tablas y **publica un evento**.
+### teams (`esports_teams`) — Q1–Q6
+Fuente de verdad de **jugadores y equipos**. Cubre búsqueda de jugadores por nickname (Q1) y por país (Q2), jugadores de un equipo filtrados por país (Q3), listado de equipos por fecha de creación (Q4), búsqueda de equipo por tag (Q5) e integrantes completos de un equipo (Q6). Cuando otro servicio necesita el nombre de un equipo o su roster, lo pide acá por REST.
 
-Queries que cubre: **Q1** (equipos de un torneo), **Q2** (torneos de un equipo), **Q5** (torneos por organizador), **Q6** (premios de un torneo), **Q7** (torneos por videojuego).
+### tournaments (`esports_tournaments`) — Q8–Q15, Q20, Q21
+El servicio más grande. Aloja tres sub-dominios que giran alrededor del torneo:
+- **Catálogos**: videojuegos por género (Q8) y lista de organizadores (Q10). Son entidades de referencia que solo existen en función de los torneos, por eso viven acá.
+- **Torneos e inscripciones**: torneos por videojuego (Q9), por organizador (Q11), por fecha (Q12), búsqueda por código (Q15); equipos inscritos en un torneo (Q13) y torneos de un equipo (Q14). Las inscripciones son el corazón: al inscribir un equipo, este servicio escribe las tablas desnormalizadas y **publica un evento**.
+- **Premios**: premios de un torneo (Q20) y premios recibidos por un equipo (Q21). Un premio pertenece al torneo, por eso vive acá.
 
-### Teams (`esports_teams`)
-Fuente de verdad de **equipos y jugadores**. Cuando otro servicio necesita el nombre de un equipo (para desnormalizar), lo pide acá por REST.
+### matches (`esports_matches`) — Q16–Q19
+Dueño de las **partidas**. Partidas de un torneo en orden cronológico (Q16), historial de un equipo (Q17), partidas de un día (Q18) y enfrentamientos directos entre dos equipos (Q19). Una partida involucra dos equipos, así que al crearla escribe el historial para ambos y **publica un evento** que alimenta rankings y estadísticas.
 
-Queries que cubre: **Q3** (jugadores de un equipo filtrados por país), **Q10** (jugadores por país).
-
-### Matches (`esports_matches`)
-Dueño de las **partidas** y sus resultados. Una partida involucra dos equipos (local y visitante), así que al crearla escribe el historial para ambos.
-
-Queries que cubre: **Q4** (partidas de un torneo, cronológico), **Q8** (historial de partidas de un equipo).
-
-### Ranking (`esports_ranking`)
-Servicio chico y **puramente event-driven**. No tiene escritura pública: escucha el evento `TeamRegisteredToTournament` y mantiene actualizado el `total_torneos` de cada equipo. Expone solo lectura del Top-N.
-
-Queries que cubre: **Q9** (ranking global, Top-N).
+### ranking (`esports_ranking`) — Q7, Q22, Q23, Q24
+Servicio **puramente event-driven**. No tiene escritura pública: consume los eventos de Tournaments y Matches y mantiene read-models agregados — ranking global de equipos por torneos (Q7), por victorias (Q22), jugadores más activos (Q23) y estadísticas de un equipo por torneo (Q24). Expone solo lectura.
 
 ## Comunicación
 
 ### REST síncrono (entre servicios)
-Cuando un servicio necesita un dato de otro **en el momento de procesar un request**, lo pide por HTTP. Se usa `HttpClient` tipado registrado con `AddHttpClient` (nunca `new HttpClient()`), con la URL inyectada por variable de entorno (`Services__Teams`, etc.).
+Cuando un servicio necesita un dato de otro **al procesar un request**, lo pide por HTTP con `HttpClient` tipado (`AddHttpClient`, nunca `new HttpClient()`), con la URL inyectada por variable de entorno (`Services__Teams`, etc.).
 
-Ejemplo concreto: al inscribir un equipo en un torneo, `tournaments` necesita el `nombre_equipo` (porque la tabla `equipos_por_torneo` lo lleva desnormalizado). Hace `GET http://teams:8080/api/equipos/{id}` y usa el nombre que recibe.
+Ejemplo concreto: al inscribir un equipo, `tournaments` necesita el `nombre_equipo` (para `equipos_por_torneo`) y la lista de `jugador_id` del roster (para armar el evento que alimenta Q23). Hace `GET http://teams:8080/api/equipos/{id}` y `GET http://teams:8080/api/equipos/{id}/integrantes`.
 
 ### Eventos asíncronos (RabbitMQ + MassTransit v8)
-Cuando un servicio necesita **reaccionar a un hecho** de otro, sin bloquear ni acoplarse, se publica un evento. El productor no sabe quién consume.
+Para **reaccionar a hechos** sin acoplar productor y consumidor. El productor no sabe quién consume.
 
-Ejemplo concreto: al inscribir un equipo, `tournaments` publica `TeamRegisteredToTournament`. `ranking` lo consume y suma 1 al `total_torneos` de ese equipo. Si mañana otro servicio quiere reaccionar al mismo evento, se suscribe sin tocar a `tournaments`.
+- `tournaments` publica `TeamRegisteredToTournament` al inscribir → `ranking` incrementa el ranking de torneos del equipo (Q7) y de cada jugador (Q23).
+- `matches` publica `MatchPlayed` al registrar una partida → `ranking` incrementa victorias del ganador (Q22) y actualiza estadísticas de ambos equipos en ese torneo (Q24).
 
-Detalle completo de eventos en `docs/05-eventos.md`.
+Detalle completo en `docs/05-eventos.md`.
 
 ## Por qué una base por servicio (database-per-service)
 
-Es el principio central de microservicios que la materia quiere ver: cada servicio es autónomo, se puede desplegar y escalar solo, y un problema en una base no tumba a los demás. El costo es que **no hay JOINs entre servicios** — por eso Cassandra (que ya es query-first y desnormalizado) encaja perfecto, y por eso aparecen los datos duplicados (`nombre_equipo`, `nombre_torneo`) entre tablas.
+Es el principio central de microservicios que la materia quiere ver: cada servicio es autónomo, se despliega y escala solo, y un problema en una base no tumba a los demás. El costo es que **no hay JOINs entre servicios** — por eso Cassandra (query-first, desnormalizado) encaja perfecto, y por eso aparecen datos duplicados (`nombre_equipo`, `nombre_torneo`) entre tablas.
 
 ## Desnormalización y dual-write
 
-El modelo Chebotko duplica datos a propósito: una tabla por patrón de consulta. Esto significa que **un solo hecho de negocio escribe varias tablas**. Reglas:
+El modelo Chebotko duplica datos a propósito: una tabla por patrón de consulta. **Un solo hecho de negocio escribe varias tablas.** Reglas:
 
-- **Dentro del mismo servicio**, las escrituras a varias tablas desnormalizadas van en un **`BATCH` de CQL** (logged batch), para que queden consistentes entre sí.
-  - Ej (Tournaments, crear torneo): `BATCH` sobre `torneos` + `torneos_por_organizador` + `torneos_por_videojuego`.
-  - Ej (Tournaments, inscribir equipo): `BATCH` sobre `equipos_por_torneo` + `torneos_por_equipo`.
-  - Ej (Matches, crear partida): `BATCH` sobre `partidas` + `partidas_por_torneo` + `partidas_por_equipo` (dos filas: local y visitante).
-  - Ej (Teams, agregar jugador): `BATCH` sobre `jugadores` + `jugadores_por_equipo` + `jugadores_por_pais`.
+- **Dentro del mismo servicio**, las escrituras a varias tablas desnormalizadas van en un **`BATCH` de CQL** (logged batch), para que queden consistentes entre sí. Ejemplos:
+  - teams, crear equipo → `equipos` + `equipos_por_fecha` + `equipos_por_tag`.
+  - teams, agregar jugador a un equipo → `jugadores` + `jugadores_por_nickname` + `jugadores_por_pais` + `jugadores_por_equipo` + `integrantes_por_equipo`.
+  - tournaments, crear torneo → `torneos` + `torneos_por_videojuego` + `torneos_por_organizador` + `torneos_por_fecha` + `torneo_por_codigo`.
+  - tournaments, inscribir equipo → `equipos_por_torneo` + `torneos_por_equipo`.
+  - tournaments, asignar premio → `premios_por_torneo` + `premios_por_equipo`.
+  - matches, registrar partida → `partidas` + `partidas_por_torneo` + `partidas_por_equipo` (2 filas) + `partidas_por_fecha` + `partidas_por_rivales` (2 filas).
 - **Entre servicios distintos** no hay BATCH posible (bases distintas). Ahí se usa REST (traer el dato al momento) o eventos (consistencia eventual).
 
-## Flujo de ejemplo end-to-end: inscribir un equipo en un torneo
+## Flujos de ejemplo end-to-end
 
+### Inscribir un equipo en un torneo
 1. Frontend → `POST http://localhost:8080/api/torneos/{torneoId}/inscripciones` con `{ equipoId }`.
-2. Gateway rutea a **Tournaments**.
-3. Tournaments hace `GET http://teams:8080/api/equipos/{equipoId}` (REST) para obtener `nombre_equipo`.
-4. Tournaments escribe en un **`BATCH`**: una fila en `equipos_por_torneo` y una en `torneos_por_equipo` (ambas con el nombre desnormalizado).
-5. Tournaments **publica** `TeamRegisteredToTournament` a RabbitMQ.
-6. **Ranking** consume el evento (asíncrono) y hace `UPDATE ranking_equipos_global SET total_torneos = total_torneos + 1 ...` para ese equipo.
-7. Respuesta `201 Created` al frontend (sin esperar al paso 6 — eso es eventual consistency).
+2. Gateway rutea a **tournaments**.
+3. tournaments hace `GET http://teams:8080/api/equipos/{equipoId}` (nombre) y `GET .../integrantes` (roster).
+4. tournaments escribe en un **`BATCH`**: `equipos_por_torneo` + `torneos_por_equipo`.
+5. tournaments **publica** `TeamRegisteredToTournament(equipoId, torneoId, nombreEquipo, jugadorIds, fecha)`.
+6. **ranking** consume el evento (asíncrono): `total_torneos += 1` del equipo (Q7) y de cada jugador del roster (Q23).
+7. Respuesta `201 Created` (sin esperar al paso 6 — eso es eventual consistency).
 
-Este flujo toca los tres patrones que la materia quiere demostrar: **gateway**, **REST entre servicios** y **event-driven con consistencia eventual**.
+### Registrar una partida
+1. Frontend → `POST /api/partidas` con torneo, equipos y resultado/ganador.
+2. Gateway rutea a **matches**.
+3. matches escribe en un **`BATCH`** las 5 tablas (incluyendo 2 filas en `partidas_por_equipo` y 2 en `partidas_por_rivales`).
+4. matches **publica** `MatchPlayed(partidaId, torneoId, equipoLocalId, equipoVisitanteId, equipoGanadorId, fecha)`.
+5. **ranking** consume: `total_victorias += 1` del ganador (Q22); en `stats_equipo_por_torneo`, ganador `victorias+1, partidas_jugadas+1` y perdedor `derrotas+1, partidas_jugadas+1` (Q24).
+
+Estos flujos tocan los tres patrones que la materia quiere demostrar: **gateway**, **REST entre servicios** y **event-driven con consistencia eventual**.
 
 ## Decisiones de arquitectura (mini-ADRs)
 
-- **Un proyecto .NET por servicio, con carpetas internas** (Controllers/Domain/Repositories/Services/Events) en vez de Clean Architecture multi-proyecto. Razón: deadline corto; la separación por capas en carpetas es suficiente para la nota y se construye mucho más rápido.
-- **Monorepo** (todo en un repo) en vez de un repo por servicio. Razón: 3 personas, un solo `git clone` + un `docker compose up`. Más simple de coordinar.
-- **RF=1, single-node Cassandra.** Razón: es entorno de desarrollo/demo en un laptop, no producción. (En el informe NO afirmar que está "listo para producción".)
-- **El Ranking se hace 4to servicio** (en vez de meterlo en Tournaments). Razón: es el ejemplo más limpio de servicio event-driven y vale mucho para demostrar el concepto. Es chico, así que el costo es bajo.
-- **Gateway con YARP** (no Ocelot). Razón: YARP es de Microsoft, se configura por JSON, y está mejor soportado en .NET 10.
+- **4 microservicios** (no más). El profe pide mínimo 3. Videojuegos, organizadores y premios se agrupan dentro de `tournaments` en vez de inflar a 6 servicios, porque son sub-dominios que solo viven alrededor del torneo. Mantiene el proyecto manejable para el deadline.
+- **Ranking & Stats juntos en un servicio event-driven.** Ambos son read-models derivados de eventos; comparten el mismo patrón (consumir → agregar con counters). Tenerlos juntos es coherente y es el mejor ejemplo de CQRS/event-driven para la defensa.
+- **Un proyecto .NET por servicio, con carpetas internas** (Controllers/Domain/Repositories/Services/Events) en vez de Clean Architecture multi-proyecto. Razón: deadline corto.
+- **Monorepo** (todo en un repo). Razón: 3 personas, un `git clone` + un `docker compose up`.
+- **RF=1, single-node Cassandra.** Es entorno de desarrollo/demo en un laptop. En el informe NO afirmar que está "listo para producción".
+- **Gateway con YARP** (no Ocelot). Mejor soportado en .NET 10, config por JSON.

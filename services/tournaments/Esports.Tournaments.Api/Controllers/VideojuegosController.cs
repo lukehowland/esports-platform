@@ -1,5 +1,7 @@
+using Esports.Auth.Shared;
 using Esports.Tournaments.Api.Dtos;
 using Esports.Tournaments.Api.Services;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Esports.Tournaments.Api.Controllers;
@@ -12,8 +14,15 @@ public class VideojuegosController : ControllerBase
     public VideojuegosController(IVideojuegoService svc) => _svc = svc;
 
     [HttpPost]
+    [Authorize]
     public async Task<IActionResult> Crear([FromBody] CrearVideojuegoRequest req)
     {
+        if (!User.EsAdmin() && User.GetRol() != AuthConstants.Roles.Organizador)
+            return Problem(
+                title: "Acceso denegado",
+                statusCode: StatusCodes.Status403Forbidden,
+                detail: "Solo organizadores o administradores pueden crear videojuegos.");
+
         var result = await _svc.CrearAsync(req);
         return CreatedAtAction(nameof(ObtenerPorId), new { id = result.VideojuegoId }, result);
     }

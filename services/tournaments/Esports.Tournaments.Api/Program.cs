@@ -1,3 +1,4 @@
+using Esports.Auth.Shared;
 using Esports.Tournaments.Api.Cassandra;
 using Esports.Tournaments.Api.HttpClients;
 using Esports.Tournaments.Api.Repositories;
@@ -31,6 +32,9 @@ builder.Services.AddScoped<IPremioService, PremioService>();
 builder.Services.AddHttpClient<TeamsClient>(c =>
     c.BaseAddress = new Uri(config["Services:Teams"] ?? "http://teams:8080"));
 
+// JWT (valida tokens emitidos por el servicio auth)
+builder.Services.AddEsportsJwtAuth(builder.Configuration);
+
 // MassTransit con RabbitMQ (solo publisher — tournaments no consume eventos)
 builder.Services.AddMassTransit(x =>
 {
@@ -55,6 +59,9 @@ if (app.Environment.IsDevelopment() || app.Environment.IsProduction())
     app.UseSwagger();
     app.UseSwaggerUI();
 }
+
+app.UseAuthentication();
+app.UseAuthorization();
 
 app.MapControllers();
 app.MapHealthChecks("/health");

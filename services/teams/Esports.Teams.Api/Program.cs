@@ -1,3 +1,4 @@
+using Esports.Auth.Shared;
 using Esports.Teams.Api.Cassandra;
 using Esports.Teams.Api.Repositories;
 using Esports.Teams.Api.Services;
@@ -21,6 +22,9 @@ builder.Services.AddSingleton<IJugadorRepository, JugadorRepository>();
 builder.Services.AddScoped<IEquipoService, EquipoService>();
 builder.Services.AddScoped<IJugadorService, JugadorService>();
 
+// JWT (valida tokens emitidos por el servicio auth)
+builder.Services.AddEsportsJwtAuth(builder.Configuration);
+
 // Health check
 builder.Services.AddHealthChecks();
 
@@ -34,6 +38,9 @@ if (app.Environment.IsDevelopment())
     app.UseSwagger();
     app.UseSwaggerUI();
 }
+
+app.UseAuthentication();
+app.UseAuthorization();
 
 app.MapControllers();
 app.MapHealthChecks("/health");

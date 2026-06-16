@@ -1,5 +1,8 @@
+using Esports.Auth.Shared;
+using Esports.Matches.Api.Clients;
 using Esports.Matches.Api.Dtos;
 using Esports.Matches.Api.Services;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Esports.Matches.Api.Controllers;
@@ -9,11 +12,42 @@ namespace Esports.Matches.Api.Controllers;
 public class PartidasController : ControllerBase
 {
     private readonly IPartidaService _svc;
-    public PartidasController(IPartidaService svc) => _svc = svc;
+    private readonly TournamentsClient _tournamentsClient;
+
+    public PartidasController(IPartidaService svc, TournamentsClient tournamentsClient)
+    {
+        _svc = svc;
+        _tournamentsClient = tournamentsClient;
+    }
 
     [HttpPost]
+    [Authorize]
     public async Task<IActionResult> Registrar([FromBody] RegistrarPartidaRequest req)
     {
+        if (!User.EsAdmin())
+        {
+            if (User.GetRol() != AuthConstants.Roles.Organizador)
+                return Problem(
+                    title: "Acceso denegado",
+                    statusCode: StatusCodes.Status403Forbidden,
+                    detail: "Solo organizadores o administradores pueden registrar partidas.");
+
+            var torneo = await _tournamentsClient.ObtenerTorneoAsync(req.TorneoId);
+            if (torneo is null)
+                return NotFound(new ProblemDetails
+                {
+                    Title = "Torneo no encontrado",
+                    Status = StatusCodes.Status404NotFound,
+                    Detail = $"No se encontró el torneo {req.TorneoId} al verificar autorización.",
+                });
+
+            if (torneo.OrganizadorId != User.GetOrganizadorId())
+                return Problem(
+                    title: "Acceso denegado",
+                    statusCode: StatusCodes.Status403Forbidden,
+                    detail: "Solo el organizador dueño del torneo puede registrar sus partidas.");
+        }
+
         try
         {
             var result = await _svc.RegistrarAsync(req);

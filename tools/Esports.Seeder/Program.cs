@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Net;
+using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
 
@@ -15,6 +16,9 @@ internal static class SeederApp
     public static async Task RunAsync()
     {
         var gatewayUrl = Environment.GetEnvironmentVariable("GatewayUrl") ?? "http://localhost:8080";
+        var adminUser = Environment.GetEnvironmentVariable("Auth__AdminUser") ?? "admin";
+        var adminPassword = Environment.GetEnvironmentVariable("Auth__AdminPassword") ?? "admin-dev-password";
+
         using var http = new HttpClient
         {
             BaseAddress = new Uri(gatewayUrl),
@@ -23,6 +27,11 @@ internal static class SeederApp
 
         Console.WriteLine($"Seeder conectando a {gatewayUrl}...");
         await WaitForGatewayAsync(http);
+
+        // Autenticarse como admin antes de cualquier mutación
+        var token = await LoginAdminAsync(http, adminUser, adminPassword);
+        http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        Console.WriteLine("Login admin exitoso. Usando token JWT para todas las mutaciones.");
 
         var games = new Dictionary<string, VideojuegoResponse>();
         foreach (var game in SeedData.Games)
@@ -58,6 +67,9 @@ internal static class SeederApp
         await WaitForRankingAsync(http);
         await PrintSummaryAsync(http);
 
+        // Registrar usuarios demo por rol para el frontend
+        await RegisterDemoUsersAsync(http, organizers, teams);
+
         Console.WriteLine();
         Console.WriteLine("=== Seeder completado con exito ===");
     }
@@ -86,6 +98,87 @@ internal static class SeederApp
         }
 
         throw new TimeoutException("El gateway no estuvo disponible para ejecutar el seed.");
+    }
+
+    private static async Task<string> LoginAdminAsync(HttpClient http, string username, string password)
+    {
+        using var response = await http.PostAsync("/api/auth/login", ToJson(new { username, password }));
+        var raw = await response.Content.ReadAsStringAsync();
+        if (!response.IsSuccessStatusCode)
+            throw new InvalidOperationException($"Login admin falló ({(int)response.StatusCode}): {raw}");
+
+        var login = JsonSerializer.Deserialize<LoginResponse>(raw, JsonOptions)
+            ?? throw new InvalidOperationException("Login admin no devolvio JSON valido.");
+        return login.Token;
+    }
+
+    private static async Task RegisterDemoUsersAsync(
+        HttpClient http,
+        IReadOnlyDictionary<string, OrganizadorResponse> organizers,
+        IReadOnlyDictionary<string, EquipoResponse> teams)
+    {
+        Console.WriteLine();
+        Console.WriteLine("Registrando usuarios demo por rol...");
+
+        foreach (var (code, org) in organizers)
+        {
+            await RegisterUserAsync(http,
+                username: $"org_{code.ToLowerInvariant()}",
+                password: "OrgDemo2024",
+                rol: "organizador",
+                nombreDisplay: org.Nombre,
+                organizadorId: org.OrganizadorId);
+        }
+
+        foreach (var (_, team) in teams)
+        {
+            await RegisterUserAsync(http,
+                username: $"cap_{team.Tag.ToLowerInvariant()}",
+                password: "CapDemo2024",
+                rol: "capitan",
+                nombreDisplay: $"Capitan {team.Nombre}",
+                equipoId: team.EquipoId);
+        }
+
+        await RegisterUserAsync(http,
+            username: "fan_demo",
+            password: "FanDemo2024",
+            rol: "fan",
+            nombreDisplay: "Fan Demo");
+
+        Console.WriteLine("Usuarios demo registrados.");
+        Console.WriteLine("  Admin:         admin           / admin-dev-password");
+        Console.WriteLine("  Organizadores: org_<code>      / OrgDemo2024  (ej: org_riot, org_esl, org_vct)");
+        Console.WriteLine("  Capitanes:     cap_<tag>       / CapDemo2024  (ej: cap_navi, cap_t1, cap_g2)");
+        Console.WriteLine("  Fan:           fan_demo        / FanDemo2024");
+    }
+
+    private static async Task RegisterUserAsync(HttpClient http, string username, string password,
+        string rol, string nombreDisplay, Guid? organizadorId = null, Guid? equipoId = null)
+    {
+        var body = new
+        {
+            username,
+            password,
+            rol,
+            organizadorId,
+            equipoId,
+            nombreDisplay
+        };
+
+        using var response = await http.PostAsync("/api/auth/register", ToJson(body));
+
+        if (response.StatusCode == HttpStatusCode.Conflict)
+        {
+            Console.WriteLine($"  Usuario '{username}' ya existe (omitido).");
+            return;
+        }
+
+        var raw = await response.Content.ReadAsStringAsync();
+        if (!response.IsSuccessStatusCode)
+            throw new InvalidOperationException($"Register '{username}' => {(int)response.StatusCode}: {raw}");
+
+        Console.WriteLine($"  Usuario '{username}' ({rol}) registrado.");
     }
 
     private static async Task<VideojuegoResponse> EnsureVideojuegoAsync(HttpClient http, GameSeed seed)
@@ -402,7 +495,12 @@ internal static class SeedData
         new("LOL_BLG", "Bilibili Gaming", "BLG", "CN", "LOL", ["CN"]),
         new("LOL_TES", "Top Esports", "TES", "CN", "LOL", ["CN"]),
         new("LOL_HLE", "Hanwha Life Esports", "HLE", "KR", "LOL", ["KR"]),
-        new("LOL_T1", "T1", "T1", "KR", "LOL", ["KR"]),
+        new("LOL_T1", "T1", "T1", "KR", "LOL", ["KR"],
+            [
+                new PlayerSeed("Faker",    "Lee Sang-hyeok", "KR", "MID"),
+                new PlayerSeed("Gumayusi", "Choi Yeon-ho",   "KR", "ADC"),
+                new PlayerSeed("Zeus",     "Choi Woo-je",    "KR", "TOP")
+            ]),
         new("LOL_G2", "G2 Esports", "G2", "DE", "LOL", ["DE", "ES", "DK", "PL"]),
         new("LOL_KC", "Karmine Corp", "KC", "FR", "LOL", ["FR", "BE"]),
         new("LOL_LYON", "LYON", "LYON", "US", "LOL", ["US", "CA"]),
@@ -415,8 +513,19 @@ internal static class SeedData
         new("CS_VIT", "Team Vitality CS2", "VIT", "FR", "CS2", ["FR", "GB", "IL", "EE"]),
         new("CS_SPIRIT", "Team Spirit CS2", "TSPI", "EU", "CS2", ["RS", "UA", "RU"]),
         new("CS_MOUZ", "MOUZ CS2", "MOUZ", "DE", "CS2", ["DE", "SE", "HU", "FI"]),
-        new("CS_NAVI", "Natus Vincere CS2", "NAVI", "UA", "CS2", ["UA", "RO", "LT"]),
-        new("CS_FAZE", "FaZe Clan CS2", "FAZE", "US", "CS2", ["US", "DK", "NO", "LV"]),
+        new("CS_NAVI", "Natus Vincere CS2", "NAVI", "UA", "CS2", ["UA", "RO", "LT"],
+            [
+                new PlayerSeed("s1mple",    "Oleksandr Kostyliev", "UA", "AWP"),
+                new PlayerSeed("electronic", "Denis Sharipov",     "UA", "RIFLER")
+            ]),
+        new("CS_FAZE", "FaZe Clan CS2", "FAZE", "US", "CS2", ["US", "DK", "NO", "LV"],
+            [
+                new PlayerSeed("karrigan", "Finn Andersen",       "DK", "IGL"),
+                new PlayerSeed("ropz",     "Robin Kool",          "EE", "RIFLER"),
+                new PlayerSeed("broky",    "Helvijs Saukants",    "LV", "AWP"),
+                new PlayerSeed("rain",     "Havard Nygaard",      "NO", "RIFLER"),
+                new PlayerSeed("twistzz",  "Russel Van Dulken",   "CA", "RIFLER")
+            ]),
         new("CS_TL", "Team Liquid CS2", "TLCS", "US", "CS2", ["US", "CA", "BR"]),
         new("CS_FURIA", "FURIA CS2", "FURCS", "BR", "CS2", ["BR"]),
         new("CS_MONG", "The MongolZ", "MONG", "MN", "CS2", ["MN"]),
@@ -561,6 +670,7 @@ internal sealed record TournamentSeed(string Key, string Nombre, string Codigo, 
 internal sealed record PrizeSeed(string Tipo, decimal Monto, Guid EquipoId);
 internal sealed record GeneratedMatch(EquipoResponse Local, EquipoResponse Visitante, EquipoResponse Ganador, string Resultado, DateTimeOffset Fecha);
 
+internal sealed record LoginResponse(string Token, string Rol, string Nombre, Guid? OrganizadorId, Guid? EquipoId, DateTimeOffset ExpiraEn);
 internal sealed record VideojuegoResponse(Guid VideojuegoId, string Nombre, string Genero);
 internal sealed record VideojuegoPorGeneroResponse(Guid VideojuegoId, string Nombre);
 internal sealed record OrganizadorResponse(Guid OrganizadorId, string Nombre);

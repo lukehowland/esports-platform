@@ -83,11 +83,7 @@ public class ErrorTests(GatewayFixture fix, ITestOutputHelper output)
         var body = JsonSerializer.Serialize(new { nombre = "", tag = "TST", pais = "CO" });
         var r = await fix.Http.PostAsync("/api/equipos",
             new StringContent(body, Encoding.UTF8, "application/json"));
-        // El modelo requiere nombre no vacío
-        Assert.True(
-            r.StatusCode == HttpStatusCode.BadRequest ||
-            r.StatusCode == HttpStatusCode.Created, // si no hay validación en el modelo, se acepta
-            $"Respuesta: {r.StatusCode}");
+        Assert.Equal(HttpStatusCode.BadRequest, r.StatusCode);
     }
 
     [Fact]

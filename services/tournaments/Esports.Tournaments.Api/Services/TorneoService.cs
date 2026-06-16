@@ -36,8 +36,8 @@ public class TorneoService : ITorneoService
         var t = new Torneo
         {
             TorneoId = Guid.NewGuid(),
-            Nombre = req.Nombre,
-            Codigo = req.Codigo,
+            Nombre = req.Nombre.Trim(),
+            Codigo = req.Codigo.Trim().ToUpperInvariant(),
             VideojuegoId = videojuego.VideojuegoId,
             NombreVideojuego = videojuego.Nombre,
             OrganizadorId = organizador.OrganizadorId,

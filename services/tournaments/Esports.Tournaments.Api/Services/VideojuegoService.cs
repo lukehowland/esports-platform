@@ -23,8 +23,8 @@ public class VideojuegoService : IVideojuegoService
         var v = new Videojuego
         {
             VideojuegoId = Guid.NewGuid(),
-            Nombre = req.Nombre,
-            Genero = req.Genero
+            Nombre = req.Nombre.Trim(),
+            Genero = req.Genero.Trim().ToUpperInvariant()
         };
         await _repo.CrearAsync(v);
         return new VideojuegoResponse(v.VideojuegoId, v.Nombre, v.Genero);

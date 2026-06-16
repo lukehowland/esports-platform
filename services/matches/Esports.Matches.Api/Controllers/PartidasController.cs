@@ -14,8 +14,19 @@ public class PartidasController : ControllerBase
     [HttpPost]
     public async Task<IActionResult> Registrar([FromBody] RegistrarPartidaRequest req)
     {
-        var result = await _svc.RegistrarAsync(req);
-        return CreatedAtAction(nameof(ObtenerPorId), new { id = result.PartidaId }, result);
+        try
+        {
+            var result = await _svc.RegistrarAsync(req);
+            return CreatedAtAction(nameof(ObtenerPorId), new { id = result.PartidaId }, result);
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new ProblemDetails
+            {
+                Title = ex.Message,
+                Status = StatusCodes.Status400BadRequest
+            });
+        }
     }
 
     [HttpGet("{id:guid}")]

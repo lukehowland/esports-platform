@@ -7,7 +7,7 @@
 - **Docker Desktop** instalado.
   - Mac (M-series): nativo ARM, no necesita nada extra.
   - Windows: usar el **backend WSL2** (default de Docker Desktop). Habilitar el sharing del disco donde esté el repo.
-- ~6 GB de RAM libres para Docker (Cassandra + RabbitMQ + 5 contenedores .NET).
+- ~6 GB de RAM libres para Docker (Cassandra + RabbitMQ + 6 contenedores .NET, seeder transitorio y frontend).
 
 ## Por qué funciona igual en Mac y Windows
 
@@ -132,6 +132,24 @@ services:
       rabbitmq:  { condition: service_healthy }
     networks: [esports-net]
 
+  auth:
+    build: { context: ., dockerfile: services/auth/Esports.Auth.Api/Dockerfile }
+    container_name: esports-auth
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      ASPNETCORE_URLS: http://0.0.0.0:8080
+      Cassandra__ContactPoints: cassandra
+      Cassandra__Keyspace: esports_auth
+      Jwt__Secret: esports-platform-dev-only-jwt-secret-insecure
+      Jwt__Issuer: esports-auth
+      Jwt__Audience: esports-platform
+      Auth__AdminUser: admin
+      Auth__AdminPassword: admin-dev-password
+    ports: ["5005:8080"]
+    depends_on:
+      cassandra: { condition: service_healthy }
+    networks: [esports-net]
+
   gateway:
     build: { context: ./gateway/Esports.Gateway, target: dev }
     container_name: esports-gateway
@@ -139,14 +157,14 @@ services:
       ASPNETCORE_ENVIRONMENT: Development
       ASPNETCORE_URLS: http://0.0.0.0:8080
     ports: ["8080:8080"]         # ← puerta pública para el frontend
-    depends_on: [teams, tournaments, matches, ranking]
+    depends_on: [teams, tournaments, matches, ranking, auth]
     networks: [esports-net]
 
 networks:
   esports-net:
 ```
 
-> No se pone `version:` arriba (obsoleto en Compose v2). Usar `docker compose` (con espacio), no `docker-compose`. Si MassTransit no conecta porque RabbitMQ aún inicia, el servicio reintenta solo; el `depends_on: service_healthy` lo minimiza.
+> No se pone `version:` arriba (obsoleto en Compose v2). Usar `docker compose` (con espacio), no `docker-compose`. Si MassTransit no conecta porque RabbitMQ aún inicia, el servicio reintenta solo; el `depends_on: service_healthy` lo minimiza. El compose real también inyecta `Jwt__*` en `teams`, `tournaments` y `matches`, y el seeder hace login admin antes de poblar datos.
 
 ## `Dockerfile` por servicio (multi-stage: dev + runtime)
 
@@ -198,12 +216,12 @@ Cada servicio, al iniciar, crea su keyspace y tablas de forma **idempotente** (c
 # Mac y Windows: lo mismo, desde la raíz del repo
 docker compose up --build
 ```
-La primera vez tarda (baja imágenes + Cassandra arranca ~1-2 min). Cuando los servicios escuchen en `:8080`, está listo. Luego: gateway en `http://localhost:8080`, Swagger en `5001`–`5004`, RabbitMQ en `http://localhost:15672`.
+La primera vez tarda (baja imágenes + Cassandra arranca ~1-2 min). Cuando los servicios escuchen en `:8080`, está listo. Luego: gateway en `http://localhost:8080`, Swagger en `5001`–`5005`, RabbitMQ en `http://localhost:15672`.
 
 ## Troubleshooting
 
 - **"Cassandra unhealthy" / servicios reiniciando al inicio**: normal los primeros ~90s; Cassandra es lenta. El `start_period` lo cubre. Si persiste, subí RAM de Docker Desktop.
-- **Puerto ocupado (8080/9042/5672/5001-5004)**: cerrá lo que lo use o cambiá el mapeo `host:contenedor`.
+- **Puerto ocupado (8080/9042/5672/5001-5005)**: cerrá lo que lo use o cambiá el mapeo `host:contenedor`.
 - **Windows: cambios de código no recargan**: confirmá `DOTNET_USE_POLLING_FILE_WATCHER=1` (ya está) y que el repo esté en ruta compartida con Docker (idealmente dentro de WSL2).
 - **Windows: scripts/Dockerfile fallan raro**: casi siempre es CRLF. Verificá `.gitattributes` commiteado; volvé a clonar o corré `git add --renormalize .`.
 - **Reset total de la base**: `docker compose down`. Cassandra no usa volumen persistente en el entorno de demo; al volver a ejecutar `docker compose up --build`, el seeder repuebla todo automaticamente.

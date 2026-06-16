@@ -12,6 +12,7 @@ Un sistema para **gestionar torneos de eSports**: organizadores crean torneos de
 - **Capitán / Equipo** — registra su equipo y jugadores; inscribe el equipo en torneos.
 - **Jugador** — pertenece a un equipo; tiene nick, país, rol.
 - **Fan / Visitante** — consulta equipos, torneos, partidas, rankings, premios.
+- **Admin demo** — usuario técnico del seed y pruebas; puede ejecutar mutaciones de setup.
 - **Sistema** — actor no humano: reacciona a eventos (actualizar rankings y stats).
 
 ---
@@ -167,6 +168,22 @@ Como **fan** o **capitán**, quiero ver las estadísticas de un equipo en un tor
 
 ---
 
+## Épica 5 — Identidad y permisos (servicio auth)
+
+**HU-34 — Iniciar sesión con un rol demo**
+Como **organizador**, **capitán**, **fan** o **admin demo**, quiero iniciar sesión, para que el backend sepa qué puedo hacer.
+- *Endpoint:* `POST /api/auth/login`.
+
+**HU-35 — Consultar mi perfil autenticado**
+Como **usuario autenticado**, quiero ver mi rol y entidad asociada, para que el frontend adapte la experiencia.
+- *Endpoint:* `GET /api/auth/me`.
+
+**HU-36 — Bloquear mutaciones sin permiso**
+Como **sistema**, quiero rechazar mutaciones sin token (`401`) o con rol/ownership incorrecto (`403`), para que un organizador no actúe como otro organizador y un capitán no actúe por otro equipo.
+- *Criterios:* lecturas públicas siguen funcionando; mutaciones se protegen en el servicio dueño del dominio.
+
+---
+
 ## Tabla resumen: historia ↔ query ↔ endpoint
 
 | HU | Query | Endpoint | Servicio |
@@ -204,10 +221,13 @@ Como **fan** o **capitán**, quiero ver las estadísticas de un equipo en un tor
 | HU-31 | Q22 | `GET /api/ranking/victorias?top=` | ranking |
 | HU-32 | Q23 | `GET /api/ranking/jugadores?top=` | ranking |
 | HU-33 | Q24 | `GET /api/stats/equipo/{id}/torneo/{id}` | ranking |
+| HU-34 | — | `POST /api/auth/login` | auth |
+| HU-35 | — | `GET /api/auth/me` | auth |
+| HU-36 | — | mutaciones protegidas con `401`/`403` | teams/tournaments/matches |
 
 ## Para la defensa: cómo contar el "por qué" distribuido
 
-- **Gateway** → "el frontend habla con una sola API aunque atrás haya 4 servicios" (todas las lecturas pasan por acá).
+- **Gateway** → "el frontend habla con una sola API aunque atrás haya 4 servicios de negocio y auth" (todas las lecturas pasan por acá).
 - **Base por servicio** → "cada servicio es autónomo; por eso desnormalizamos con Cassandra/Chebotko en vez de hacer JOINs".
 - **REST entre servicios** → HU-18: "al inscribir, tournaments le pide a teams el nombre y el roster del equipo".
 - **Event-driven + CQRS** → HU-18, HU-24, HU-29: "inscripciones y partidas publican eventos; el servicio de ranking es un read-model que reacciona y agrega métricas con counters; los rankings son eventualmente consistentes, que es el comportamiento esperado de un sistema distribuido".

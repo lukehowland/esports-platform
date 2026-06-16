@@ -4,7 +4,7 @@
 
 La plataforma es un sistema distribuido de microservicios. Cada servicio es dueño de su propio dominio y su propia base de datos (keyspace de Cassandra). Se comunican de dos formas: **REST síncrono** (cuando un servicio necesita un dato de otro en el momento) y **eventos asíncronos por RabbitMQ** (cuando un servicio necesita reaccionar a algo que pasó en otro, sin acoplarse). Un **API Gateway** (YARP) expone una sola URL pública.
 
-El modelo Chebotko tiene 24 tablas (Q1–Q24) repartidas en 4 servicios según su dominio.
+El modelo Chebotko tiene 24 tablas (Q1–Q24) repartidas en 4 servicios de negocio según su dominio. Además existe un quinto servicio, `auth`, para identidad demo, JWT y autorización real por rol/ownership.
 
 ```mermaid
 flowchart TB
@@ -14,10 +14,11 @@ flowchart TB
     GW -->|/api/videojuegos, /api/organizadores,<br/>/api/torneos, /api/inscripciones, /api/premios| T[tournaments :8080<br/>Q8-Q15, Q20, Q21]
     GW -->|/api/partidas| M[matches :8080<br/>Q16-Q19]
     GW -->|/api/ranking, /api/stats| R[ranking :8080<br/>Q7, Q22, Q23, Q24]
+    GW -->|/api/auth| A[auth :8080<br/>JWT + roles]
 
     T -->|REST: nombre + roster del equipo| TE
     M -.->|REST opcional: validar equipo/torneo| TE
-    M -.->|REST opcional: validar torneo| T
+    M -.->|REST: validar owner del torneo| T
 
     T -.->|evento TeamRegisteredToTournament| MQ[(RabbitMQ)]
     M -.->|evento MatchPlayed| MQ
@@ -27,9 +28,10 @@ flowchart TB
     T --> CT[(esports_tournaments)]
     M --> CM[(esports_matches)]
     R --> CR[(esports_ranking)]
+    A --> CA[(esports_auth)]
 ```
 
-> Si tu visor no renderiza Mermaid: el frontend habla solo con el Gateway; el Gateway rutea a los 4 servicios; Tournaments le pide a Teams el nombre y roster del equipo por REST al inscribir; Tournaments y Matches publican eventos a RabbitMQ que Ranking consume para mantener rankings y estadísticas; cada servicio tiene su propio keyspace.
+> Si tu visor no renderiza Mermaid: el frontend habla solo con el Gateway; el Gateway rutea a los 4 servicios de negocio y a `auth`; Tournaments le pide a Teams el nombre y roster del equipo por REST al inscribir; Matches le pide a Tournaments el torneo para verificar ownership; Tournaments y Matches publican eventos a RabbitMQ que Ranking consume para mantener rankings y estadísticas; cada servicio tiene su propio keyspace.
 
 ## Los servicios y sus fronteras
 
@@ -48,12 +50,27 @@ Dueño de las **partidas**. Partidas de un torneo en orden cronológico (Q16), h
 ### ranking (`esports_ranking`) — Q7, Q22, Q23, Q24
 Servicio **puramente event-driven**. No tiene escritura pública: consume los eventos de Tournaments y Matches y mantiene read-models agregados — ranking global de equipos por torneos (Q7), por victorias (Q22), jugadores más activos (Q23) y estadísticas de un equipo por torneo (Q24). Expone solo lectura.
 
+### auth (`esports_auth`) — identidad demo y JWT
+Servicio dueño de usuarios demo y tokens JWT. Persiste `usuarios` en Cassandra con password PBKDF2 para el entorno académico. Emite claims `username`, `rol`, `organizador_id`, `equipo_id` y `nombre`. No decide reglas de negocio por sí solo: cada servicio dueño de la mutación valida token y ownership localmente con `Esports.Auth.Shared`.
+
 ## Comunicación
 
 ### REST síncrono (entre servicios)
 Cuando un servicio necesita un dato de otro **al procesar un request**, lo pide por HTTP con `HttpClient` tipado (`AddHttpClient`, nunca `new HttpClient()`), con la URL inyectada por variable de entorno (`Services__Teams`, etc.).
 
 Ejemplo concreto: al inscribir un equipo, `tournaments` necesita el `nombre_equipo` (para `equipos_por_torneo`) y la lista de `jugador_id` del roster (para armar el evento que alimenta Q23). Hace `GET http://teams:8080/api/equipos/{id}` y `GET http://teams:8080/api/equipos/{id}/integrantes`.
+
+Otro ejemplo: al registrar una partida como organizador, `matches` necesita saber quién es dueño del torneo. Hace `GET http://tournaments:8080/api/torneos/{id}` con `HttpClient` tipado y compara el `organizadorId` con el claim `organizador_id`.
+
+### Autenticación y autorización
+El gateway no centraliza reglas de permisos; solo reenvía el header `Authorization`. El servicio `auth` emite tokens, y `teams`, `tournaments` y `matches` validan esos tokens en sus mutaciones:
+
+- `admin`: puede todo; lo usa el seeder y la suite de integración.
+- `organizador`: puede crear videojuegos y operar únicamente torneos de su `organizador_id`.
+- `capitan`: puede agregar jugadores/inscribir únicamente su `equipo_id`.
+- `fan` o anónimo: solo lectura.
+
+Las lecturas Q1–Q24 siguen públicas para que el frontend pueda funcionar como visitante.
 
 ### Eventos asíncronos (RabbitMQ + MassTransit v8)
 Para **reaccionar a hechos** sin acoplar productor y consumidor. El productor no sabe quién consume.
@@ -102,7 +119,7 @@ Estos flujos tocan los tres patrones que la materia quiere demostrar: **gateway*
 
 ## Decisiones de arquitectura (mini-ADRs)
 
-- **4 microservicios** (no más). El profe pide mínimo 3. Videojuegos, organizadores y premios se agrupan dentro de `tournaments` en vez de inflar a 6 servicios, porque son sub-dominios que solo viven alrededor del torneo. Mantiene el proyecto manejable para el deadline.
+- **5 microservicios: 4 de negocio + auth.** Videojuegos, organizadores y premios siguen agrupados dentro de `tournaments` para no inflar servicios de dominio. `auth` se agregó como excepción deliberada porque los roles solo en frontend no protegían mutaciones ni ownership real.
 - **Ranking & Stats juntos en un servicio event-driven.** Ambos son read-models derivados de eventos; comparten el mismo patrón (consumir → agregar con counters). Tenerlos juntos es coherente y es el mejor ejemplo de CQRS/event-driven para la defensa.
 - **Un proyecto .NET por servicio, con carpetas internas** (Controllers/Domain/Repositories/Services/Events) en vez de Clean Architecture multi-proyecto. Razón: deadline corto.
 - **Monorepo** (todo en un repo). Razón: 3 personas, un `git clone` + un `docker compose up`.

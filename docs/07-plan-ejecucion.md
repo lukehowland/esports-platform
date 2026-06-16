@@ -136,14 +136,14 @@
 **Objetivo:** datos de ejemplo para el frontend y documentación de arranque.
 
 **Tareas:**
-1. `tools/Esports.Seeder` (consola o script) que, vía el gateway, cargue: ~4 videojuegos (varios géneros), ~3 organizadores, ~8 equipos con jugadores de distintos países (varios por equipo), ~5 torneos, inscripciones cruzadas, premios y ~15 partidas con ganadores. Idempotente o "reset-friendly".
-2. Correrlo cross-platform: `docker compose run --rm seeder` o `dotnet run` documentado.
+1. `tools/Esports.Seeder` (consola o script) que, vía el gateway, cargue datos realistas y conectados: videojuegos, organizadores, equipos con jugadores de distintos países, torneos, inscripciones cruzadas, premios y partidas con ganadores. Idempotente y "reset-friendly".
+2. Correrlo automaticamente dentro de `docker compose up --build` para que no existan pasos manuales antes de usar el frontend.
 3. `README.md`: requisitos, cómo levantar en Mac y Windows, URLs, cómo correr el seeder, link a docs/04.
 
-**Criterio de aceptación:** tras `docker compose up` + seeder, las 24 queries devuelven datos no vacíos vía el gateway; un compañero en Windows levanta el proyecto siguiendo el README.
+**Criterio de aceptación:** tras `docker compose up --build`, las 24 queries devuelven datos no vacíos vía el gateway; un compañero en Windows levanta el proyecto siguiendo el README.
 
 **Prompt sugerido:**
-> Leé CLAUDE.md y docs. Creá `tools/Esports.Seeder` que cargue datos realistas vía el gateway (videojuegos de varios géneros, organizadores, equipos con jugadores de varios países, torneos, inscripciones, premios, partidas con ganadores) cubriendo las 24 queries. Cross-platform (`docker compose run`). Escribí el README con pasos para Mac y Windows, URLs y endpoints. Verificá que tras seedear, Q1–Q24 traen datos.
+> Leé CLAUDE.md y docs. Creá `tools/Esports.Seeder` que cargue datos realistas vía el gateway (videojuegos de varios géneros, organizadores, equipos con jugadores de varios países, torneos, inscripciones, premios, partidas con ganadores) cubriendo las 24 queries. Integralo al flujo normal de `docker compose up --build`. Escribí el README con pasos para Mac y Windows, URLs y endpoints. Verificá que Q1–Q24 traen datos.
 
 ---
 
@@ -152,13 +152,13 @@
 **Objetivo:** todo verde y en GitHub.
 
 **Tareas:**
-1. `docker compose down -v` + `docker compose up --build` desde cero → arranque limpio sin pasos manuales.
+1. `docker compose down` + `docker compose up --build` desde cero → arranque limpio, repoblado y sin pasos manuales.
 2. Recorrer la checklist de Definition of Done (`CLAUDE.md §7`).
 3. Probar las 24 queries vía gateway + los dos flujos de evento.
 4. Commit + push a GitHub (`LukeHowland`).
 
 **Prompt sugerido:**
-> Leé CLAUDE.md §7. Reset limpio (`docker compose down -v` y `up --build`), recorré la Definition of Done, probá las 24 queries vía el gateway y los dos flujos de evento, arreglá lo que falle, y dejá todo commiteado para push.
+> Leé CLAUDE.md §7. Reset limpio (`docker compose down` y `docker compose up --build`), recorré la Definition of Done, probá las 24 queries vía el gateway y los dos flujos de evento, arreglá lo que falle, y dejá todo commiteado para push.
 
 ---
 
@@ -168,7 +168,7 @@ Cuando termine la Fase 6, pasales:
 - **URL base:** `http://localhost:8080` (todo cuelga de acá).
 - **Swagger por servicio:** `:5001`–`:5004/swagger`.
 - **`docs/04-contratos-api.md`** (los 24 endpoints con shapes).
-- **Arranque:** `docker compose up --build` + correr el seeder.
+- **Arranque:** `docker compose up --build` deja el stack levantado y poblado.
 - Recordá que rankings y stats son eventualmente consistentes (pueden tardar un instante tras una inscripción o partida).
 
 ## Orden de prioridad si el tiempo aprieta

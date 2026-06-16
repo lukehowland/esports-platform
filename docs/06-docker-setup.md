@@ -43,8 +43,6 @@ services:
       CASSANDRA_CLUSTER_NAME: esports-cluster
       MAX_HEAP_SIZE: 512M
       HEAP_NEWSIZE: 128M
-    volumes:
-      - cassandra-data:/var/lib/cassandra
     healthcheck:
       test: ["CMD-SHELL", "cqlsh -e 'describe keyspaces' || exit 1"]
       interval: 15s
@@ -144,9 +142,6 @@ services:
     depends_on: [teams, tournaments, matches, ranking]
     networks: [esports-net]
 
-volumes:
-  cassandra-data:
-
 networks:
   esports-net:
 ```
@@ -211,5 +206,5 @@ La primera vez tarda (baja imágenes + Cassandra arranca ~1-2 min). Cuando los s
 - **Puerto ocupado (8080/9042/5672/5001-5004)**: cerrá lo que lo use o cambiá el mapeo `host:contenedor`.
 - **Windows: cambios de código no recargan**: confirmá `DOTNET_USE_POLLING_FILE_WATCHER=1` (ya está) y que el repo esté en ruta compartida con Docker (idealmente dentro de WSL2).
 - **Windows: scripts/Dockerfile fallan raro**: casi siempre es CRLF. Verificá `.gitattributes` commiteado; volvé a clonar o corré `git add --renormalize .`.
-- **Reset total de la base**: `docker compose down -v`.
+- **Reset total de la base**: `docker compose down`. Cassandra no usa volumen persistente en el entorno de demo; al volver a ejecutar `docker compose up --build`, el seeder repuebla todo automaticamente.
 - **MassTransit pide licencia / error de versión**: te coló la v9. Forzá `Version="8.*"` y `dotnet restore`.

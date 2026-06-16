@@ -99,8 +99,8 @@ docker compose up --build              # levantar todo el stack
 docker compose logs -f tournaments     # logs de un servicio
 docker compose exec tournaments bash   # entrar a un contenedor
 docker compose exec cassandra cqlsh    # consola CQL
-docker compose down                    # bajar (conserva datos)
-docker compose down -v                 # bajar y BORRAR la base (reset limpio)
+docker compose down                    # bajar y dejar la proxima subida limpia
+docker compose up --build              # levantar y repoblar automaticamente con el seeder
 ```
 
 > Todo corre en Docker. **No hay flujo de desarrollo local fuera de Docker** — el proyecto debe funcionar igual en macOS (Apple Silicon) y Windows con un solo `docker compose up --build`. Ver `docs/06-docker-setup.md`.

@@ -26,15 +26,10 @@ La primera vez tarda ~3–5 minutos (descarga imágenes y compila). Las siguient
 Esperar hasta ver en los logs:
 ```
 esports-gateway  | Now listening on: http://0.0.0.0:8080
+esports-seeder   | === Seeder completado con exito ===
 ```
 
-### Cargar datos de ejemplo (opcional)
-
-En otra terminal, con el stack ya levantado:
-
-```bash
-docker compose run --rm seeder
-```
+El seeder corre automaticamente en cada arranque limpio y carga datos realistas conectados para todos los servicios.
 
 ## URLs
 
@@ -80,12 +75,11 @@ GET  /api/stats/equipo/{equipoId}/torneo/{torneoId}  Q24
 
 El proyecto incluye 97 tests de integración que verifican todas las funcionalidades (Q1–Q24) y casos de error a través del gateway.
 
-**Prerequisitos:** el stack debe estar levantado y el seeder debe haber corrido.
+**Prerequisitos:** el stack debe estar levantado. El seeder corre automaticamente antes del frontend y antes de los tests.
 
 ```bash
-# Levantar stack + seeder (si no está levantado)
+# Levantar stack completo
 docker compose up --build
-docker compose run --rm seeder
 
 # Ejecutar los tests
 docker compose run --rm tests
@@ -105,11 +99,11 @@ docker compose logs -f tournaments
 # Entrar a la consola CQL de Cassandra
 docker compose exec cassandra cqlsh
 
-# Bajar el stack (conserva datos)
+# Bajar el stack. Al volver a levantar, Cassandra inicia limpia y el seeder repuebla.
 docker compose down
 
-# Reset completo (borra la base de datos)
-docker compose down -v
+# Arranque limpio con datos demo frescos
+docker compose down
 docker compose up --build
 ```
 

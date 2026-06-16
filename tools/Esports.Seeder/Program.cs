@@ -1,171 +1,578 @@
+using System.Globalization;
+using System.Net;
 using System.Text;
 using System.Text.Json;
 
-var gatewayUrl = Environment.GetEnvironmentVariable("GatewayUrl") ?? "http://localhost:8080";
-var http = new HttpClient { BaseAddress = new Uri(gatewayUrl) };
-var json = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+await SeederApp.RunAsync();
 
-Console.WriteLine($"Seeder conectando a {gatewayUrl}...");
-
-// Esperar hasta que el gateway responda
-for (int i = 0; i < 30; i++)
+internal static class SeederApp
 {
-    try { await http.GetAsync("/health"); break; }
-    catch { Console.WriteLine($"Gateway no disponible, reintentando ({i + 1}/30)..."); await Task.Delay(3000); }
+    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
+    {
+        PropertyNameCaseInsensitive = true
+    };
+
+    public static async Task RunAsync()
+    {
+        var gatewayUrl = Environment.GetEnvironmentVariable("GatewayUrl") ?? "http://localhost:8080";
+        using var http = new HttpClient
+        {
+            BaseAddress = new Uri(gatewayUrl),
+            Timeout = TimeSpan.FromSeconds(45)
+        };
+
+        Console.WriteLine($"Seeder conectando a {gatewayUrl}...");
+        await WaitForGatewayAsync(http);
+
+        var games = new Dictionary<string, VideojuegoResponse>();
+        foreach (var game in SeedData.Games)
+            games[game.Code] = await EnsureVideojuegoAsync(http, game);
+
+        var organizers = new Dictionary<string, OrganizadorResponse>();
+        foreach (var organizer in SeedData.Organizers)
+            organizers[organizer.Code] = await EnsureOrganizadorAsync(http, organizer);
+
+        var teams = new Dictionary<string, EquipoResponse>();
+        foreach (var team in SeedData.Teams)
+        {
+            var createdTeam = await EnsureEquipoAsync(http, team);
+            teams[team.Key] = createdTeam;
+
+            foreach (var player in SeedData.BuildRoster(team))
+                await EnsureJugadorAsync(http, createdTeam.EquipoId, player);
+        }
+
+        var tournaments = new Dictionary<string, TorneoResponse>();
+        foreach (var tournament in SeedData.Tournaments)
+        {
+            var createdTournament = await EnsureTorneoAsync(http, tournament, games, organizers);
+            tournaments[tournament.Key] = createdTournament;
+
+            foreach (var teamKey in tournament.TeamKeys)
+                await EnsureInscripcionAsync(http, createdTournament, teams[teamKey]);
+
+            await EnsurePrizePackAsync(http, createdTournament, tournament, teams);
+            await EnsureMatchesAsync(http, createdTournament, tournament, teams);
+        }
+
+        await WaitForRankingAsync(http);
+        await PrintSummaryAsync(http);
+
+        Console.WriteLine();
+        Console.WriteLine("=== Seeder completado con exito ===");
+    }
+
+    private static async Task WaitForGatewayAsync(HttpClient http)
+    {
+        for (var i = 1; i <= 60; i++)
+        {
+            try
+            {
+                using var response = await http.GetAsync("/health");
+                if (response.IsSuccessStatusCode)
+                {
+                    Console.WriteLine("Gateway saludable.");
+                    return;
+                }
+
+                Console.WriteLine($"Gateway respondio {response.StatusCode}; reintento {i}/60...");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Gateway no disponible ({ex.Message}); reintento {i}/60...");
+            }
+
+            await Task.Delay(TimeSpan.FromSeconds(3));
+        }
+
+        throw new TimeoutException("El gateway no estuvo disponible para ejecutar el seed.");
+    }
+
+    private static async Task<VideojuegoResponse> EnsureVideojuegoAsync(HttpClient http, GameSeed seed)
+    {
+        var genre = NormalizeCode(seed.Genero);
+        var existing = await GetOrEmptyAsync<VideojuegoPorGeneroResponse>(http, $"/api/videojuegos/por-genero/{Uri.EscapeDataString(genre)}");
+        var match = existing.FirstOrDefault(v => Same(v.Nombre, seed.Nombre));
+        if (match is not null)
+        {
+            Console.WriteLine($"Videojuego existente: {seed.Nombre}");
+            return new VideojuegoResponse(match.VideojuegoId, match.Nombre, genre);
+        }
+
+        var created = await PostAsync<VideojuegoResponse>(http, "/api/videojuegos", new
+        {
+            nombre = seed.Nombre,
+            genero = genre
+        });
+        Console.WriteLine($"Videojuego creado: {created.Nombre}");
+        return created;
+    }
+
+    private static async Task<OrganizadorResponse> EnsureOrganizadorAsync(HttpClient http, OrganizerSeed seed)
+    {
+        var existing = await GetOrEmptyAsync<OrganizadorResponse>(http, "/api/organizadores");
+        var match = existing.FirstOrDefault(o => Same(o.Nombre, seed.Nombre));
+        if (match is not null)
+        {
+            Console.WriteLine($"Organizador existente: {seed.Nombre}");
+            return match;
+        }
+
+        var created = await PostAsync<OrganizadorResponse>(http, "/api/organizadores", new
+        {
+            nombre = seed.Nombre
+        });
+        Console.WriteLine($"Organizador creado: {created.Nombre}");
+        return created;
+    }
+
+    private static async Task<EquipoResponse> EnsureEquipoAsync(HttpClient http, TeamSeed seed)
+    {
+        var tag = NormalizeCode(seed.Tag);
+        var existing = await GetOptionalAsync<EquipoResponse>(http, $"/api/equipos/por-tag/{Uri.EscapeDataString(tag)}");
+        if (existing is not null)
+        {
+            Console.WriteLine($"Equipo existente: [{tag}] {existing.Nombre}");
+            return existing;
+        }
+
+        var created = await PostAsync<EquipoResponse>(http, "/api/equipos", new
+        {
+            nombre = seed.Nombre,
+            tag,
+            pais = NormalizeCode(seed.Pais)
+        });
+        Console.WriteLine($"Equipo creado: [{created.Tag}] {created.Nombre}");
+        return created;
+    }
+
+    private static async Task EnsureJugadorAsync(HttpClient http, Guid equipoId, PlayerSeed seed)
+    {
+        var nickname = seed.Nickname.Trim();
+        var existing = await GetOptionalAsync<JugadorResponse>(http, $"/api/jugadores/por-nickname/{Uri.EscapeDataString(nickname)}");
+        if (existing is not null)
+            return;
+
+        var created = await PostAsync<JugadorResponse>(http, $"/api/equipos/{equipoId}/jugadores", new
+        {
+            nickname,
+            nombre = seed.Nombre.Trim(),
+            pais = NormalizeCode(seed.Pais),
+            rol = seed.Rol.Trim()
+        });
+        Console.WriteLine($"  Jugador creado: {created.Nickname}");
+    }
+
+    private static async Task<TorneoResponse> EnsureTorneoAsync(
+        HttpClient http,
+        TournamentSeed seed,
+        IReadOnlyDictionary<string, VideojuegoResponse> games,
+        IReadOnlyDictionary<string, OrganizadorResponse> organizers)
+    {
+        var code = NormalizeCode(seed.Codigo);
+        var existing = await GetOptionalAsync<TorneoPorCodigoResponse>(http, $"/api/torneos/por-codigo/{Uri.EscapeDataString(code)}");
+        if (existing is not null)
+        {
+            var full = await GetRequiredAsync<TorneoResponse>(http, $"/api/torneos/{existing.TorneoId}");
+            Console.WriteLine($"Torneo existente: {full.Codigo} - {full.Nombre}");
+            return full;
+        }
+
+        var created = await PostAsync<TorneoResponse>(http, "/api/torneos", new
+        {
+            nombre = seed.Nombre,
+            codigo = code,
+            videojuegoId = games[seed.GameCode].VideojuegoId,
+            organizadorId = organizers[seed.OrganizerCode].OrganizadorId,
+            fechaInicio = ParseUtc(seed.FechaInicio)
+        });
+        Console.WriteLine($"Torneo creado: {created.Codigo} - {created.Nombre}");
+        return created;
+    }
+
+    private static async Task EnsureInscripcionAsync(HttpClient http, TorneoResponse torneo, EquipoResponse equipo)
+    {
+        var existing = await GetOrEmptyAsync<EquipoPorTorneoResponse>(http, $"/api/torneos/{torneo.TorneoId}/equipos");
+        if (existing.Any(e => e.EquipoId == equipo.EquipoId))
+            return;
+
+        await PostNoBodyAsync(http, $"/api/torneos/{torneo.TorneoId}/inscripciones", new
+        {
+            equipoId = equipo.EquipoId
+        });
+        Console.WriteLine($"  Inscrito: [{equipo.Tag}] en {torneo.Codigo}");
+    }
+
+    private static async Task EnsurePrizePackAsync(
+        HttpClient http,
+        TorneoResponse torneo,
+        TournamentSeed seed,
+        IReadOnlyDictionary<string, EquipoResponse> teams)
+    {
+        var podium = seed.TeamKeys.Take(4).Select(k => teams[k]).ToArray();
+        var prizes = new[]
+        {
+            new PrizeSeed("Campeon", seed.BasePrize, podium[0].EquipoId),
+            new PrizeSeed("Subcampeon", Math.Round(seed.BasePrize * 0.45m, 2), podium[1].EquipoId),
+            new PrizeSeed("Semifinalista", Math.Round(seed.BasePrize * 0.20m, 2), podium[2].EquipoId),
+            new PrizeSeed("MVP del torneo", Math.Round(seed.BasePrize * 0.08m, 2), podium[3].EquipoId)
+        };
+
+        var existing = await GetOrEmptyAsync<PremioResponse>(http, $"/api/torneos/{torneo.TorneoId}/premios");
+        foreach (var prize in prizes)
+        {
+            if (existing.Any(p => Same(p.Tipo, prize.Tipo) && p.EquipoId == prize.EquipoId && p.Monto == prize.Monto))
+                continue;
+
+            await PostAsync<PremioResponse>(http, $"/api/torneos/{torneo.TorneoId}/premios", new
+            {
+                monto = prize.Monto,
+                tipo = prize.Tipo,
+                equipoId = prize.EquipoId
+            });
+            Console.WriteLine($"  Premio creado: {torneo.Codigo} - {prize.Tipo}");
+        }
+    }
+
+    private static async Task EnsureMatchesAsync(
+        HttpClient http,
+        TorneoResponse torneo,
+        TournamentSeed seed,
+        IReadOnlyDictionary<string, EquipoResponse> teams)
+    {
+        var tournamentTeams = seed.TeamKeys.Select(k => teams[k]).ToArray();
+        var existing = await GetOrEmptyAsync<PartidaPorTorneoResponse>(http, $"/api/partidas/por-torneo/{torneo.TorneoId}");
+        foreach (var match in SeedData.BuildMatches(seed, tournamentTeams))
+        {
+            if (existing.Any(p =>
+                    Same(p.NombreLocal, match.Local.Nombre) &&
+                    Same(p.NombreVisitante, match.Visitante.Nombre) &&
+                    Same(p.Resultado, match.Resultado) &&
+                    SameInstant(p.Fecha, match.Fecha)))
+            {
+                continue;
+            }
+
+            await PostAsync<PartidaResponse>(http, "/api/partidas", new
+            {
+                torneoId = torneo.TorneoId,
+                nombreTorneo = torneo.Nombre,
+                fecha = match.Fecha,
+                equipoLocalId = match.Local.EquipoId,
+                nombreLocal = match.Local.Nombre,
+                equipoVisitanteId = match.Visitante.EquipoId,
+                nombreVisitante = match.Visitante.Nombre,
+                equipoGanadorId = match.Ganador.EquipoId,
+                resultado = match.Resultado
+            });
+            Console.WriteLine($"  Partida creada: {torneo.Codigo} {match.Local.Tag} vs {match.Visitante.Tag}");
+        }
+    }
+
+    private static async Task WaitForRankingAsync(HttpClient http)
+    {
+        for (var i = 1; i <= 30; i++)
+        {
+            var equipos = await GetOrEmptyAsync<RankingEquipoResponse>(http, "/api/ranking/equipos?top=10");
+            var victorias = await GetOrEmptyAsync<RankingVictoriaResponse>(http, "/api/ranking/victorias?top=10");
+            var jugadores = await GetOrEmptyAsync<RankingJugadorResponse>(http, "/api/ranking/jugadores?top=10");
+
+            if (equipos.Any() && victorias.Any() && jugadores.Any())
+            {
+                Console.WriteLine("Ranking actualizado por eventos.");
+                return;
+            }
+
+            Console.WriteLine($"Esperando eventos de ranking ({i}/30)...");
+            await Task.Delay(TimeSpan.FromSeconds(2));
+        }
+
+        throw new TimeoutException("Ranking no reflejo los eventos del seed dentro del tiempo esperado.");
+    }
+
+    private static async Task PrintSummaryAsync(HttpClient http)
+    {
+        var equipos = await GetOrEmptyAsync<EquipoResponse>(http, "/api/equipos/por-fecha");
+        var torneos = await GetOrEmptyAsync<TorneoResumenResponse>(http, "/api/torneos/por-fecha");
+        var organizadores = await GetOrEmptyAsync<OrganizadorResponse>(http, "/api/organizadores");
+        var rankingEquipos = await GetOrEmptyAsync<RankingEquipoResponse>(http, "/api/ranking/equipos?top=50");
+        var rankingVictorias = await GetOrEmptyAsync<RankingVictoriaResponse>(http, "/api/ranking/victorias?top=50");
+        var rankingJugadores = await GetOrEmptyAsync<RankingJugadorResponse>(http, "/api/ranking/jugadores?top=50");
+
+        Console.WriteLine();
+        Console.WriteLine("Resumen del seed:");
+        Console.WriteLine($"  - Equipos: {equipos.Count}");
+        Console.WriteLine($"  - Torneos: {torneos.Count}");
+        Console.WriteLine($"  - Organizadores: {organizadores.Count}");
+        Console.WriteLine($"  - Ranking equipos por torneos: {rankingEquipos.Count}");
+        Console.WriteLine($"  - Ranking equipos por victorias: {rankingVictorias.Count}");
+        Console.WriteLine($"  - Ranking jugadores activos: {rankingJugadores.Count}");
+    }
+
+    private static async Task<List<T>> GetOrEmptyAsync<T>(HttpClient http, string path)
+    {
+        var result = await GetOptionalAsync<List<T>>(http, path);
+        return result ?? [];
+    }
+
+    private static async Task<T> GetRequiredAsync<T>(HttpClient http, string path)
+        where T : class
+    {
+        return await GetOptionalAsync<T>(http, path)
+            ?? throw new InvalidOperationException($"GET {path} no devolvio datos.");
+    }
+
+    private static async Task<T?> GetOptionalAsync<T>(HttpClient http, string path)
+        where T : class
+    {
+        using var response = await http.GetAsync(path);
+        if (response.StatusCode == HttpStatusCode.NotFound)
+            return null;
+
+        var raw = await response.Content.ReadAsStringAsync();
+        if (!response.IsSuccessStatusCode)
+            throw new InvalidOperationException($"GET {path} => {(int)response.StatusCode} {response.StatusCode}: {raw}");
+
+        if (string.IsNullOrWhiteSpace(raw))
+            return null;
+
+        return JsonSerializer.Deserialize<T>(raw, JsonOptions);
+    }
+
+    private static async Task<T> PostAsync<T>(HttpClient http, string path, object body)
+        where T : class
+    {
+        using var response = await http.PostAsync(path, ToJson(body));
+        var raw = await response.Content.ReadAsStringAsync();
+        if (!response.IsSuccessStatusCode)
+            throw new InvalidOperationException($"POST {path} => {(int)response.StatusCode} {response.StatusCode}: {raw}");
+
+        return JsonSerializer.Deserialize<T>(raw, JsonOptions)
+            ?? throw new InvalidOperationException($"POST {path} no devolvio JSON valido: {raw}");
+    }
+
+    private static async Task PostNoBodyAsync(HttpClient http, string path, object body)
+    {
+        using var response = await http.PostAsync(path, ToJson(body));
+        var raw = await response.Content.ReadAsStringAsync();
+        if (!response.IsSuccessStatusCode)
+            throw new InvalidOperationException($"POST {path} => {(int)response.StatusCode} {response.StatusCode}: {raw}");
+    }
+
+    private static StringContent ToJson(object body) =>
+        new(JsonSerializer.Serialize(body, JsonOptions), Encoding.UTF8, "application/json");
+
+    private static DateTimeOffset ParseUtc(string value) =>
+        DateTimeOffset.Parse(value, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal)
+            .ToUniversalTime();
+
+    private static string NormalizeCode(string value) => value.Trim().ToUpperInvariant();
+
+    private static bool Same(string left, string right) =>
+        string.Equals(left.Trim(), right.Trim(), StringComparison.OrdinalIgnoreCase);
+
+    private static bool SameInstant(DateTimeOffset left, DateTimeOffset right) =>
+        left.ToUniversalTime().ToUnixTimeSeconds() == right.ToUniversalTime().ToUnixTimeSeconds();
 }
 
-static StringContent Json(object obj) =>
-    new(JsonSerializer.Serialize(obj), Encoding.UTF8, "application/json");
-
-static async Task<Guid> Post(HttpClient http, string path, object body)
+internal static class SeedData
 {
-    var resp = await http.PostAsync(path, Json(body));
-    var raw = await resp.Content.ReadAsStringAsync();
-    if (!resp.IsSuccessStatusCode)
-        throw new Exception($"POST {path} => {resp.StatusCode}: {raw}");
-    using var doc = JsonDocument.Parse(raw);
-    // primer campo guid del response
-    foreach (var prop in doc.RootElement.EnumerateObject())
-        if (prop.Value.ValueKind == JsonValueKind.String &&
-            Guid.TryParse(prop.Value.GetString(), out var id))
-            return id;
-    throw new Exception($"No se pudo extraer GUID de: {raw}");
+    public static readonly GameSeed[] Games =
+    [
+        new("LOL", "League of Legends", "MOBA"),
+        new("VAL", "Valorant", "FPS"),
+        new("CS2", "Counter-Strike 2", "FPS"),
+        new("DOTA2", "Dota 2", "MOBA"),
+        new("RL", "Rocket League", "SPORTS")
+    ];
+
+    public static readonly OrganizerSeed[] Organizers =
+    [
+        new("RIOT", "Riot Games"),
+        new("LOLE", "LoL Esports"),
+        new("VCT", "VALORANT Champions Tour"),
+        new("ESL", "ESL FACEIT Group"),
+        new("BLAST", "BLAST Premier"),
+        new("PGL", "PGL"),
+        new("UNIVALLE", "UNIVALLE Esports")
+    ];
+
+    public static readonly TeamSeed[] Teams =
+    [
+        new("LOL_BLG", "Bilibili Gaming", "BLG", "CN", "LOL", ["CN"]),
+        new("LOL_TES", "Top Esports", "TES", "CN", "LOL", ["CN"]),
+        new("LOL_HLE", "Hanwha Life Esports", "HLE", "KR", "LOL", ["KR"]),
+        new("LOL_T1", "T1", "T1", "KR", "LOL", ["KR"]),
+        new("LOL_G2", "G2 Esports", "G2", "DE", "LOL", ["DE", "ES", "DK", "PL"]),
+        new("LOL_KC", "Karmine Corp", "KC", "FR", "LOL", ["FR", "BE"]),
+        new("LOL_LYON", "LYON", "LYON", "US", "LOL", ["US", "CA"]),
+        new("LOL_TLAW", "Team Liquid Alienware", "TLAW", "US", "LOL", ["US", "CA", "KR"]),
+        new("LOL_TSW", "Team Secret Whales", "TSW", "VN", "LOL", ["VN"]),
+        new("LOL_DCG", "Deep Cross Gaming", "DCG", "TW", "LOL", ["TW"]),
+        new("LOL_FURIA", "FURIA", "FUR", "BR", "LOL", ["BR"]),
+        new("LOL_FNC", "Fnatic", "FNC", "GB", "LOL", ["GB", "SE", "CZ", "DE"]),
+
+        new("CS_VIT", "Team Vitality CS2", "VIT", "FR", "CS2", ["FR", "GB", "IL", "EE"]),
+        new("CS_SPIRIT", "Team Spirit CS2", "TSPI", "EU", "CS2", ["RS", "UA", "RU"]),
+        new("CS_MOUZ", "MOUZ CS2", "MOUZ", "DE", "CS2", ["DE", "SE", "HU", "FI"]),
+        new("CS_NAVI", "Natus Vincere CS2", "NAVI", "UA", "CS2", ["UA", "RO", "LT"]),
+        new("CS_FAZE", "FaZe Clan CS2", "FAZE", "US", "CS2", ["US", "DK", "NO", "LV"]),
+        new("CS_TL", "Team Liquid CS2", "TLCS", "US", "CS2", ["US", "CA", "BR"]),
+        new("CS_FURIA", "FURIA CS2", "FURCS", "BR", "CS2", ["BR"]),
+        new("CS_MONG", "The MongolZ", "MONG", "MN", "CS2", ["MN"]),
+        new("CS_PAIN", "paiN Gaming CS2", "PAIN", "BR", "CS2", ["BR"]),
+        new("CS_FALC", "Team Falcons CS2", "FALC", "SA", "CS2", ["SA", "DK", "RU"]),
+        new("CS_ASTR", "Astralis CS2", "ASTR", "DK", "CS2", ["DK"]),
+        new("CS_G2", "G2 Esports CS2", "G2CS", "DE", "CS2", ["DE", "RU", "BA", "PL"]),
+
+        new("VAL_G2", "G2 Esports Valorant", "G2V", "US", "VAL", ["US", "CA"]),
+        new("VAL_SEN", "Sentinels", "SEN", "US", "VAL", ["US", "MA"]),
+        new("VAL_MIBR", "MIBR Valorant", "MIBRV", "BR", "VAL", ["BR"]),
+        new("VAL_NRG", "NRG Valorant", "NRG", "US", "VAL", ["US", "CA"]),
+        new("VAL_PRX", "Paper Rex", "PRX", "SG", "VAL", ["SG", "ID", "MY"]),
+        new("VAL_T1", "T1 Valorant", "T1V", "KR", "VAL", ["KR"]),
+        new("VAL_RRQ", "Rex Regum Qeon", "RRQ", "ID", "VAL", ["ID"]),
+        new("VAL_KRX", "Kiwoom DRX", "KRX", "KR", "VAL", ["KR"]),
+        new("VAL_FNC", "Fnatic Valorant", "FNCV", "GB", "VAL", ["GB", "FI", "TR", "SE"]),
+        new("VAL_TL", "Team Liquid Valorant", "TLV", "NL", "VAL", ["NL", "GB", "BE"]),
+        new("VAL_GX", "GIANTX", "GX", "ES", "VAL", ["ES", "DE", "TR"]),
+        new("VAL_TH", "Team Heretics", "TH", "ES", "VAL", ["ES", "LT", "TR"]),
+        new("VAL_BLG", "Bilibili Gaming Valorant", "BLGV", "CN", "VAL", ["CN"]),
+        new("VAL_EDG", "EDward Gaming", "EDG", "CN", "VAL", ["CN"]),
+        new("VAL_XLG", "Xi Lai Gaming", "XLG", "CN", "VAL", ["CN"]),
+        new("VAL_DRG", "Dragon Ranger Gaming", "DRG", "CN", "VAL", ["CN"])
+    ];
+
+    public static readonly TournamentSeed[] Tournaments =
+    [
+        new("LOL_MSI26", "League of Legends MSI 2026", "MSI26", "LOL", "LOLE", "2026-06-28T12:00:00Z", 350000m,
+            ["LOL_BLG", "LOL_TES", "LOL_HLE", "LOL_T1", "LOL_G2", "LOL_KC", "LOL_LYON", "LOL_TLAW", "LOL_TSW", "LOL_DCG", "LOL_FURIA"]),
+        new("LOL_WORLDS25", "League of Legends Worlds 2025", "WORLDS25", "LOL", "RIOT", "2025-10-14T08:00:00Z", 500000m,
+            ["LOL_T1", "LOL_G2", "LOL_FNC", "LOL_BLG", "LOL_TES", "LOL_HLE", "LOL_FURIA", "LOL_TLAW", "LOL_TSW", "LOL_KC"]),
+        new("LOL_LEC26", "LEC Summer 2026", "LEC-SUM26", "LOL", "LOLE", "2026-07-25T17:00:00Z", 120000m,
+            ["LOL_G2", "LOL_KC", "LOL_FNC", "LOL_TLAW", "LOL_HLE", "LOL_BLG", "LOL_T1", "LOL_TES"]),
+
+        new("VAL_CHAMP25", "VALORANT Champions Paris 2025", "VCT-CHAMP25", "VAL", "VCT", "2025-09-12T15:00:00Z", 1000000m,
+            ["VAL_G2", "VAL_SEN", "VAL_MIBR", "VAL_NRG", "VAL_PRX", "VAL_T1", "VAL_RRQ", "VAL_KRX", "VAL_FNC", "VAL_TL", "VAL_GX", "VAL_TH", "VAL_BLG", "VAL_EDG", "VAL_XLG", "VAL_DRG"]),
+        new("VAL_AMER25", "VCT Americas Stage 2 2025", "VCT-AMER-S2-25", "VAL", "VCT", "2025-07-18T20:00:00Z", 250000m,
+            ["VAL_G2", "VAL_SEN", "VAL_MIBR", "VAL_NRG", "VAL_PRX", "VAL_T1", "VAL_RRQ", "VAL_KRX"]),
+        new("VAL_EMEA25", "VCT EMEA Stage 2 2025", "VCT-EMEA-S2-25", "VAL", "VCT", "2025-07-16T18:00:00Z", 250000m,
+            ["VAL_FNC", "VAL_TL", "VAL_GX", "VAL_TH", "VAL_G2", "VAL_SEN", "VAL_EDG", "VAL_BLG"]),
+        new("VAL_MASTERS25", "VALORANT Masters Toronto 2025", "MASTERS-TOR25", "VAL", "RIOT", "2025-06-07T17:00:00Z", 650000m,
+            ["VAL_G2", "VAL_FNC", "VAL_PRX", "VAL_RRQ", "VAL_T1", "VAL_TL", "VAL_EDG", "VAL_NRG"]),
+
+        new("CS_IEM26", "IEM Cologne Major 2026", "IEM-COL26", "CS2", "ESL", "2026-06-02T12:00:00Z", 500000m,
+            ["CS_VIT", "CS_SPIRIT", "CS_MOUZ", "CS_NAVI", "CS_FAZE", "CS_TL", "CS_FURIA", "CS_MONG", "CS_PAIN", "CS_FALC", "CS_ASTR", "CS_G2"]),
+        new("CS_BLAST_AUS25", "BLAST.tv Austin Major 2025", "BLAST-AUS25", "CS2", "BLAST", "2025-06-03T16:00:00Z", 500000m,
+            ["CS_VIT", "CS_MONG", "CS_PAIN", "CS_FURIA", "CS_NAVI", "CS_FAZE", "CS_G2", "CS_TL", "CS_SPIRIT", "CS_MOUZ", "CS_FALC", "CS_ASTR"]),
+        new("CS_PORTO26", "BLAST Premier Open Porto 2026", "BLAST-PORTO26", "CS2", "BLAST", "2026-08-26T15:00:00Z", 150000m,
+            ["CS_VIT", "CS_FALC", "CS_G2", "CS_FURIA", "CS_NAVI", "CS_FAZE", "CS_ASTR", "CS_MOUZ"]),
+        new("CS_FORTWORTH26", "BLAST Premier Rivals Fort Worth 2026", "BLAST-FW26", "CS2", "BLAST", "2026-05-01T18:00:00Z", 300000m,
+            ["CS_VIT", "CS_ASTR", "CS_G2", "CS_FALC", "CS_FURIA", "CS_NAVI", "CS_FAZE", "CS_MOUZ"]),
+
+        new("UNI_CUP26", "UNIVALLE Esports Invitational 2026", "UNI-INV26", "VAL", "UNIVALLE", "2026-09-10T18:30:00Z", 25000m,
+            ["VAL_G2", "VAL_SEN", "VAL_FNC", "VAL_TL", "VAL_NRG", "VAL_PRX", "VAL_T1", "VAL_TH"])
+    ];
+
+    private static readonly string[] LoLRoles = ["TOP", "JUNGLE", "MID", "ADC", "SUPPORT"];
+    private static readonly string[] ValorantRoles = ["DUELIST", "CONTROLLER", "INITIATOR", "SENTINEL", "FLEX"];
+    private static readonly string[] CsRoles = ["IGL", "ENTRY", "AWP", "RIFLER", "LURKER"];
+    private static readonly string[] DefaultRoles = ["CAPTAIN", "PLAYMAKER", "SUPPORT", "FLEX", "ANALYST"];
+    private static readonly string[] Handles = ["Aegis", "Blaze", "Cipher", "Drift", "Echo", "Flux", "Ghost", "Hex", "Ion", "Jolt"];
+    private static readonly string[] GivenNames = ["Alex", "Minjun", "Santiago", "Mateo", "Lucas", "Noah", "Kai", "Bruno", "Diego", "Elias", "Marek", "Leo"];
+    private static readonly string[] Surnames = ["Kim", "Lee", "Garcia", "Silva", "Nielsen", "Novak", "Chen", "Park", "Smith", "Rossi", "Muller", "Kowalski"];
+
+    public static IEnumerable<PlayerSeed> BuildRoster(TeamSeed team)
+    {
+        if (team.Players is { Length: > 0 })
+            return team.Players;
+
+        var roles = team.GameCode switch
+        {
+            "LOL" => LoLRoles,
+            "VAL" => ValorantRoles,
+            "CS2" => CsRoles,
+            _ => DefaultRoles
+        };
+
+        var stem = new string(team.Tag.Where(char.IsLetterOrDigit).ToArray()).ToUpperInvariant();
+        var seed = team.Tag.Sum(c => c);
+        return roles.Select((role, index) =>
+        {
+            var country = team.PlayerCountries[index % team.PlayerCountries.Length];
+            var handle = Handles[(seed + index) % Handles.Length];
+            var given = GivenNames[(seed + index * 2) % GivenNames.Length];
+            var surname = Surnames[(seed + index * 3) % Surnames.Length];
+            return new PlayerSeed($"{stem}{handle}", $"{given} {surname}", country, role);
+        });
+    }
+
+    public static IEnumerable<GeneratedMatch> BuildMatches(TournamentSeed tournament, IReadOnlyList<EquipoResponse> teams)
+    {
+        var start = DateTimeOffset.Parse(tournament.FechaInicio, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal)
+            .ToUniversalTime();
+        var rounds = Math.Min(4, Math.Max(1, teams.Count - 1));
+        var matchNumber = 0;
+
+        for (var round = 0; round < rounds; round++)
+        {
+            for (var i = 0; i < teams.Count - 1; i += 2)
+            {
+                var local = teams[(i + round) % teams.Count];
+                var visitor = teams[(i + round + 1) % teams.Count];
+                if (local.EquipoId == visitor.EquipoId)
+                    continue;
+
+                var winner = (matchNumber + round) % 3 == 0 ? visitor : local;
+                var fecha = start.AddDays(round + 1).AddHours(14 + (i / 2 * 2));
+                yield return new GeneratedMatch(local, visitor, winner, ScoreFor(tournament.GameCode, matchNumber, false), fecha);
+                matchNumber++;
+            }
+        }
+
+        if (teams.Count >= 2)
+        {
+            var finalDate = start.AddDays(rounds + 3).AddHours(20);
+            yield return new GeneratedMatch(teams[0], teams[1], teams[0], ScoreFor(tournament.GameCode, matchNumber, true), finalDate);
+        }
+    }
+
+    private static string ScoreFor(string gameCode, int matchNumber, bool final)
+    {
+        if (gameCode == "CS2")
+        {
+            var scores = new[] { "13-8", "13-10", "16-14", "13-11", "19-17" };
+            return scores[matchNumber % scores.Length];
+        }
+
+        if (final)
+            return matchNumber % 2 == 0 ? "3-1" : "3-2";
+
+        var series = new[] { "2-0", "2-1", "1-0", "2-1" };
+        return series[matchNumber % series.Length];
+    }
 }
 
-Console.WriteLine("\n=== Creando videojuegos ===");
-var lolId = await Post(http, "/api/videojuegos", new { nombre = "League of Legends", genero = "MOBA" });
-var valId = await Post(http, "/api/videojuegos", new { nombre = "Valorant", genero = "FPS" });
-var cs2Id = await Post(http, "/api/videojuegos", new { nombre = "Counter-Strike 2", genero = "FPS" });
-var dota2Id = await Post(http, "/api/videojuegos", new { nombre = "Dota 2", genero = "MOBA" });
-Console.WriteLine($"LoL={lolId}, Valorant={valId}, CS2={cs2Id}, Dota2={dota2Id}");
+internal sealed record GameSeed(string Code, string Nombre, string Genero);
+internal sealed record OrganizerSeed(string Code, string Nombre);
+internal sealed record TeamSeed(string Key, string Nombre, string Tag, string Pais, string GameCode, string[] PlayerCountries, PlayerSeed[]? Players = null);
+internal sealed record PlayerSeed(string Nickname, string Nombre, string Pais, string Rol);
+internal sealed record TournamentSeed(string Key, string Nombre, string Codigo, string GameCode, string OrganizerCode, string FechaInicio, decimal BasePrize, string[] TeamKeys);
+internal sealed record PrizeSeed(string Tipo, decimal Monto, Guid EquipoId);
+internal sealed record GeneratedMatch(EquipoResponse Local, EquipoResponse Visitante, EquipoResponse Ganador, string Resultado, DateTimeOffset Fecha);
 
-Console.WriteLine("\n=== Creando organizadores ===");
-var eslId = await Post(http, "/api/organizadores", new { nombre = "ESL Gaming" });
-var pglId = await Post(http, "/api/organizadores", new { nombre = "PGL" });
-var blastId = await Post(http, "/api/organizadores", new { nombre = "BLAST Premier" });
-Console.WriteLine($"ESL={eslId}, PGL={pglId}, BLAST={blastId}");
-
-Console.WriteLine("\n=== Creando equipos ===");
-var t1Id = await Post(http, "/api/equipos", new { nombre = "T1", tag = "T1", pais = "KR" });
-var drxId = await Post(http, "/api/equipos", new { nombre = "DRX", tag = "DRX", pais = "KR" });
-var fnId = await Post(http, "/api/equipos", new { nombre = "Fnatic", tag = "FNC", pais = "GB" });
-var c9Id = await Post(http, "/api/equipos", new { nombre = "Cloud9", tag = "C9", pais = "US" });
-var naviId = await Post(http, "/api/equipos", new { nombre = "Natus Vincere", tag = "NaVi", pais = "UA" });
-var fazeId = await Post(http, "/api/equipos", new { nombre = "FaZe Clan", tag = "FaZe", pais = "EU" });
-var liqId = await Post(http, "/api/equipos", new { nombre = "Team Liquid", tag = "TL", pais = "US" });
-var g2Id = await Post(http, "/api/equipos", new { nombre = "G2 Esports", tag = "G2", pais = "ES" });
-Console.WriteLine($"T1={t1Id}, DRX={drxId}, FNC={fnId}, C9={c9Id}, NaVi={naviId}, FaZe={fazeId}, TL={liqId}, G2={g2Id}");
-
-Console.WriteLine("\n=== Agregando jugadores ===");
-// T1
-await Post(http, $"/api/equipos/{t1Id}/jugadores", new { nickname = "Faker", nombre = "Lee Sang-hyeok", pais = "KR", rol = "MID" });
-await Post(http, $"/api/equipos/{t1Id}/jugadores", new { nickname = "Gumayusi", nombre = "Lee Min-hyeong", pais = "KR", rol = "ADC" });
-await Post(http, $"/api/equipos/{t1Id}/jugadores", new { nickname = "Zeus", nombre = "Choi Woo-je", pais = "KR", rol = "TOP" });
-// DRX
-await Post(http, $"/api/equipos/{drxId}/jugadores", new { nickname = "Zeka", nombre = "Kim Geon-woo", pais = "KR", rol = "MID" });
-await Post(http, $"/api/equipos/{drxId}/jugadores", new { nickname = "Deft", nombre = "Kim Hyuk-kyu", pais = "KR", rol = "ADC" });
-// FNC
-await Post(http, $"/api/equipos/{fnId}/jugadores", new { nickname = "Humanoid", nombre = "Marek Brazda", pais = "CZ", rol = "MID" });
-await Post(http, $"/api/equipos/{fnId}/jugadores", new { nickname = "Upset", nombre = "Elias Lipp", pais = "DE", rol = "ADC" });
-// NaVi
-await Post(http, $"/api/equipos/{naviId}/jugadores", new { nickname = "s1mple", nombre = "Oleksandr Kostylev", pais = "UA", rol = "SNIPER" });
-await Post(http, $"/api/equipos/{naviId}/jugadores", new { nickname = "electronic", nombre = "Denis Sharipov", pais = "RU", rol = "RIFLER" });
-// FaZe
-await Post(http, $"/api/equipos/{fazeId}/jugadores", new { nickname = "karrigan", nombre = "Finn Andersen", pais = "DK", rol = "IGL" });
-// C9
-await Post(http, $"/api/equipos/{c9Id}/jugadores", new { nickname = "Xeppaa", nombre = "Erick Bach", pais = "US", rol = "DUELIST" });
-// TL
-await Post(http, $"/api/equipos/{liqId}/jugadores", new { nickname = "nAts", nombre = "Ayaz Akhmetshin", pais = "RU", rol = "SENTINEL" });
-// G2
-await Post(http, $"/api/equipos/{g2Id}/jugadores", new { nickname = "Mixwell", nombre = "Oscar Cañellas", pais = "ES", rol = "DUELIST" });
-Console.WriteLine("Jugadores creados.");
-
-Console.WriteLine("\n=== Creando torneos ===");
-var worlds25Id = await Post(http, "/api/torneos", new {
-    nombre = "Worlds 2025", codigo = "WORLDS25",
-    videojuegoId = lolId, organizadorId = eslId,
-    fechaInicio = "2025-10-15T00:00:00Z"
-});
-var msi26Id = await Post(http, "/api/torneos", new {
-    nombre = "MSI 2026", codigo = "MSI26",
-    videojuegoId = lolId, organizadorId = pglId,
-    fechaInicio = "2026-05-01T00:00:00Z"
-});
-var blastSpId = await Post(http, "/api/torneos", new {
-    nombre = "BLAST Spring 2026", codigo = "BLAST-SPR26",
-    videojuegoId = valId, organizadorId = blastId,
-    fechaInicio = "2026-03-10T00:00:00Z"
-});
-var csMajorId = await Post(http, "/api/torneos", new {
-    nombre = "CS2 Major Copenhagen", codigo = "CS2MAJOR26",
-    videojuegoId = cs2Id, organizadorId = pglId,
-    fechaInicio = "2026-04-01T00:00:00Z"
-});
-var dotaId = await Post(http, "/api/torneos", new {
-    nombre = "The International 2025", codigo = "TI25",
-    videojuegoId = dota2Id, organizadorId = eslId,
-    fechaInicio = "2025-08-20T00:00:00Z"
-});
-Console.WriteLine($"Worlds={worlds25Id}, MSI={msi26Id}, BLAST={blastSpId}, CSMajor={csMajorId}, TI={dotaId}");
-
-Console.WriteLine("\n=== Inscripciones ===");
-// Worlds 2025: T1 y DRX
-await http.PostAsync($"/api/torneos/{worlds25Id}/inscripciones", Json(new { equipoId = t1Id }));
-await http.PostAsync($"/api/torneos/{worlds25Id}/inscripciones", Json(new { equipoId = drxId }));
-await http.PostAsync($"/api/torneos/{worlds25Id}/inscripciones", Json(new { equipoId = fnId }));
-// MSI 2026: T1, FNC, G2
-await http.PostAsync($"/api/torneos/{msi26Id}/inscripciones", Json(new { equipoId = t1Id }));
-await http.PostAsync($"/api/torneos/{msi26Id}/inscripciones", Json(new { equipoId = fnId }));
-await http.PostAsync($"/api/torneos/{msi26Id}/inscripciones", Json(new { equipoId = g2Id }));
-// BLAST: C9, TL, FNC
-await http.PostAsync($"/api/torneos/{blastSpId}/inscripciones", Json(new { equipoId = c9Id }));
-await http.PostAsync($"/api/torneos/{blastSpId}/inscripciones", Json(new { equipoId = liqId }));
-await http.PostAsync($"/api/torneos/{blastSpId}/inscripciones", Json(new { equipoId = fnId }));
-// CS Major: NaVi, FaZe, C9
-await http.PostAsync($"/api/torneos/{csMajorId}/inscripciones", Json(new { equipoId = naviId }));
-await http.PostAsync($"/api/torneos/{csMajorId}/inscripciones", Json(new { equipoId = fazeId }));
-await http.PostAsync($"/api/torneos/{csMajorId}/inscripciones", Json(new { equipoId = c9Id }));
-Console.WriteLine("Inscripciones realizadas.");
-
-Console.WriteLine("\n=== Premios ===");
-await http.PostAsync($"/api/torneos/{worlds25Id}/premios", Json(new { monto = 500000m, tipo = "Primer lugar", equipoId = t1Id }));
-await http.PostAsync($"/api/torneos/{worlds25Id}/premios", Json(new { monto = 200000m, tipo = "Segundo lugar", equipoId = drxId }));
-await http.PostAsync($"/api/torneos/{csMajorId}/premios", Json(new { monto = 250000m, tipo = "Campeón", equipoId = naviId }));
-Console.WriteLine("Premios asignados.");
-
-Console.WriteLine("\n=== Partidas ===");
-async Task Partida(Guid trn, string nomTrn, Guid loc, string nomLoc, Guid vis, string nomVis, Guid ganador, string res, string fecha) =>
-    await http.PostAsync("/api/partidas", Json(new {
-        torneoId = trn, nombreTorneo = nomTrn,
-        equipoLocalId = loc, nombreLocal = nomLoc,
-        equipoVisitanteId = vis, nombreVisitante = nomVis,
-        equipoGanadorId = ganador, resultado = res, fecha
-    }));
-
-// Worlds 2025
-await Partida(worlds25Id, "Worlds 2025", t1Id, "T1", drxId, "DRX", t1Id, "T1 WIN 3-1", "2025-10-15T14:00:00Z");
-await Partida(worlds25Id, "Worlds 2025", drxId, "DRX", fnId, "Fnatic", drxId, "DRX WIN 2-0", "2025-10-16T14:00:00Z");
-await Partida(worlds25Id, "Worlds 2025", t1Id, "T1", fnId, "Fnatic", t1Id, "T1 WIN 3-0", "2025-10-17T14:00:00Z");
-await Partida(worlds25Id, "Worlds 2025", t1Id, "T1", drxId, "DRX", drxId, "DRX WIN 3-2 (Remontada)", "2025-10-20T14:00:00Z");
-await Partida(worlds25Id, "Worlds 2025", t1Id, "T1", drxId, "DRX", t1Id, "T1 WIN 3-1 (Final)", "2025-10-22T18:00:00Z");
-// MSI 2026
-await Partida(msi26Id, "MSI 2026", t1Id, "T1", fnId, "Fnatic", t1Id, "T1 WIN 2-0", "2026-05-03T18:00:00Z");
-await Partida(msi26Id, "MSI 2026", fnId, "Fnatic", g2Id, "G2 Esports", g2Id, "G2 WIN 2-1", "2026-05-04T18:00:00Z");
-// CS Major
-await Partida(csMajorId, "CS2 Major Copenhagen", naviId, "NaVi", fazeId, "FaZe Clan", naviId, "16-12", "2026-04-10T16:00:00Z");
-await Partida(csMajorId, "CS2 Major Copenhagen", fazeId, "FaZe Clan", c9Id, "Cloud9", fazeId, "16-8", "2026-04-11T16:00:00Z");
-await Partida(csMajorId, "CS2 Major Copenhagen", naviId, "NaVi", c9Id, "Cloud9", naviId, "16-10", "2026-04-12T16:00:00Z");
-// BLAST
-await Partida(blastSpId, "BLAST Spring 2026", c9Id, "Cloud9", liqId, "Team Liquid", c9Id, "2-0", "2026-03-12T20:00:00Z");
-await Partida(blastSpId, "BLAST Spring 2026", liqId, "Team Liquid", fnId, "Fnatic", liqId, "2-1", "2026-03-13T20:00:00Z");
-Console.WriteLine("Partidas registradas.");
-
-Console.WriteLine("\n=== ¡Seeder completado con éxito! ===");
-Console.WriteLine("Datos de ejemplo cargados:");
-Console.WriteLine("  - 4 videojuegos (LoL, Valorant, CS2, Dota 2)");
-Console.WriteLine("  - 3 organizadores");
-Console.WriteLine("  - 8 equipos con sus jugadores");
-Console.WriteLine("  - 5 torneos");
-Console.WriteLine("  - 12 inscripciones");
-Console.WriteLine("  - 3 premios");
-Console.WriteLine("  - 12 partidas");
+internal sealed record VideojuegoResponse(Guid VideojuegoId, string Nombre, string Genero);
+internal sealed record VideojuegoPorGeneroResponse(Guid VideojuegoId, string Nombre);
+internal sealed record OrganizadorResponse(Guid OrganizadorId, string Nombre);
+internal sealed record EquipoResponse(Guid EquipoId, string Nombre, string Tag, string Pais, DateTimeOffset FechaCreacion);
+internal sealed record JugadorResponse(Guid JugadorId, string Nickname, string Nombre, string Pais, string Rol, Guid EquipoId);
+internal sealed record TorneoResponse(Guid TorneoId, string Nombre, string Codigo, Guid VideojuegoId, string NombreVideojuego, Guid OrganizadorId, string NombreOrganizador, DateTimeOffset FechaInicio);
+internal sealed record TorneoPorCodigoResponse(Guid TorneoId, string Nombre, DateTimeOffset FechaInicio);
+internal sealed record TorneoResumenResponse(Guid TorneoId, string NombreTorneo, string NombreVideojuego, DateTimeOffset FechaInicio);
+internal sealed record EquipoPorTorneoResponse(Guid EquipoId, string NombreEquipo, DateTimeOffset FechaInscripcion);
+internal sealed record PremioResponse(Guid PremioId, Guid TorneoId, decimal Monto, string Tipo, Guid? EquipoId, string? NombreEquipo);
+internal sealed record PartidaResponse(Guid PartidaId, Guid TorneoId, string NombreTorneo, DateTimeOffset Fecha, Guid EquipoLocalId, Guid EquipoVisitanteId, string NombreLocal, string NombreVisitante, Guid EquipoGanadorId, string Resultado);
+internal sealed record PartidaPorTorneoResponse(Guid PartidaId, string NombreLocal, string NombreVisitante, string Resultado, DateTimeOffset Fecha);
+internal sealed record RankingEquipoResponse(int Posicion, Guid EquipoId, long TotalTorneos);
+internal sealed record RankingVictoriaResponse(int Posicion, Guid EquipoId, long TotalVictorias);
+internal sealed record RankingJugadorResponse(int Posicion, Guid JugadorId, long TotalTorneos);

@@ -31,6 +31,54 @@ export interface PartidaPorRivalesResponse {
   fecha: string;
 }
 
+export interface LiveTeamState {
+  equipoId: string;
+  nombre: string;
+  tag: string;
+  pais: string;
+  kills: number;
+  torres: number;
+  dragones: number;
+  barones: number;
+  oro: number;
+  oroPorMinuto: number;
+  vaGanando: boolean;
+}
+
+export interface LiveObjectiveEvent {
+  segundo: number;
+  minuto: string;
+  tipo: string;
+  nombre: string;
+  equipoTag: string;
+}
+
+export interface LiveTimelineEvent {
+  segundo: number;
+  minuto: string;
+  equipoTag: string;
+  tipo: string;
+  texto: string;
+  localKills: number;
+  visitanteKills: number;
+}
+
+export interface LiveMatchResponse {
+  matchId: string;
+  estado: "EN_VIVO" | "FINALIZADA";
+  duracionSegundos: number;
+  segundoActual: number;
+  reloj: string;
+  videojuego: string;
+  torneoCodigo: string;
+  torneoNombre: string;
+  local: LiveTeamState;
+  visitante: LiveTeamState;
+  objetivos: LiveObjectiveEvent[];
+  timeline: LiveTimelineEvent[];
+  narrativa: string;
+}
+
 export interface RegistrarPartidaDto {
   torneoId: string;
   nombreTorneo: string;
@@ -58,6 +106,11 @@ export const getPartidasPorFecha = (dia: string) =>
 // Q19
 export const getPartidasEntre = (equipoId: string, rivalId: string) =>
   fetcher<PartidaPorRivalesResponse[]>(`/api/partidas/entre/${equipoId}/${rivalId}`);
+
+export const getPartidaEnVivoDestacada = (elapsedSeconds?: number) =>
+  fetcher<LiveMatchResponse>(
+    `/api/partidas/en-vivo/destacada${elapsedSeconds === undefined ? "" : `?elapsedSeconds=${elapsedSeconds}`}`
+  );
 
 // Mutación
 export const registrarPartida = (data: RegistrarPartidaDto) =>

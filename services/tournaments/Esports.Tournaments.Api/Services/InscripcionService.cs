@@ -37,14 +37,15 @@ public class InscripcionService : IInscripcionService
         var equipo = await _teamsClient.ObtenerEquipoAsync(req.EquipoId)
             ?? throw new KeyNotFoundException($"Equipo {req.EquipoId} no encontrado en el servicio teams.");
 
-        var jugadorIds = await _teamsClient.ObtenerJugadorIdsAsync(req.EquipoId);
+        var integrantes = await _teamsClient.ObtenerJugadoresAsync(req.EquipoId);
+        var jugadores = integrantes.Select(i => new JugadorRef(i.JugadorId, i.Nickname)).ToList();
 
         var fechaInscripcion = DateTimeOffset.UtcNow;
         await _repo.InscribirAsync(torneoId, req.EquipoId, equipo.Nombre,
             fechaInscripcion, torneo.FechaInicio, torneo.Nombre, torneo.NombreVideojuego);
 
         await _bus.Publish(new TeamRegisteredToTournament(
-            req.EquipoId, torneoId, equipo.Nombre, jugadorIds, fechaInscripcion));
+            req.EquipoId, torneoId, equipo.Nombre, jugadores, fechaInscripcion));
     }
 
     public Task<IEnumerable<EquipoPorTorneoResponse>> ObtenerEquiposPorTorneoAsync(Guid torneoId)

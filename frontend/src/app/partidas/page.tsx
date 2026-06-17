@@ -3,8 +3,8 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Swords, Calendar, Users } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { HudPanel, HudEyebrow } from "@/components/hud-panel";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -45,27 +45,33 @@ function PartidaPorFecha() {
         isLoading ? <Skeleton className="h-32" /> :
         error ? <ErrorState error={error} onRetry={refetch} /> :
         data?.length === 0 ? <EmptyState title="Sin partidas" description={`No hubo partidas el ${formatDate(fechaBuscada)}.`} /> : (
-          <div>
-            <p className="text-xs text-muted-foreground mb-3">{data?.length} partidas el {formatDate(fechaBuscada)}</p>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Local</TableHead>
-                  <TableHead>Visitante</TableHead>
-                  <TableHead>Resultado (marcador)</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {data?.map((p) => (
-                  <TableRow key={p.partidaId}>
-                    <TableCell className="font-medium">{p.nombreLocal}</TableCell>
-                    <TableCell className="text-muted-foreground">{p.nombreVisitante}</TableCell>
-                    <TableCell><Badge variant="secondary">{p.resultado}</Badge></TableCell>
+          <HudPanel>
+              <div className="px-4 py-2 border-b border-line">
+                <HudEyebrow>{data?.length} partidas el {formatDate(fechaBuscada)}</HudEyebrow>
+              </div>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Local</TableHead>
+                    <TableHead>Visitante</TableHead>
+                    <TableHead>Resultado</TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
+                </TableHeader>
+                <TableBody>
+                  {data?.map((p) => (
+                    <TableRow key={p.partidaId}>
+                      <TableCell className="font-medium">{p.nombreLocal}</TableCell>
+                      <TableCell className="text-muted-foreground">{p.nombreVisitante}</TableCell>
+                      <TableCell>
+                        <span className="hud-clip-sm border border-violet/30 bg-violet/10 text-violet font-mono text-xs px-2 py-0.5">
+                          {p.resultado}
+                        </span>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </HudPanel>
         )
       )}
     </div>
@@ -138,29 +144,29 @@ function PartidaEntreDosEquipos() {
             description={`${equipoA?.nombre ?? "Equipo A"} y ${equipoB?.nombre ?? "Equipo B"} nunca se han enfrentado.`}
           />
         ) : (
-          <div>
-            <p className="text-xs text-muted-foreground mb-3">
-              {data?.length} enfrentamiento(s) entre <span className="text-primary">{equipoA?.nombre}</span> y <span className="text-primary">{equipoB?.nombre}</span>
-            </p>
+          <HudPanel>
+            <div className="px-4 py-2 border-b border-line">
+              <HudEyebrow>{data?.length} enfrentamiento(s) · {equipoA?.nombre} vs {equipoB?.nombre}</HudEyebrow>
+            </div>
             <Table>
               <TableHeader>
                 <TableRow>
                   <TableHead>Partido</TableHead>
-                  <TableHead>Resultado (desde perspectiva del local)</TableHead>
+                  <TableHead>Resultado</TableHead>
                   <TableHead>Fecha</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {data?.map((p, i) => (
                   <TableRow key={p.partidaId}>
-                    <TableCell className="text-muted-foreground">#{i + 1}</TableCell>
+                    <TableCell className="text-muted-foreground font-mono">#{i + 1}</TableCell>
                     <TableCell><ResultadoBadge resultado={p.resultado} /></TableCell>
                     <TableCell className="text-muted-foreground">{formatDateTime(p.fecha)}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>
             </Table>
-          </div>
+          </HudPanel>
         )
       )}
     </div>
@@ -170,9 +176,12 @@ function PartidaEntreDosEquipos() {
 export default function PartidasPage() {
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold text-foreground flex items-center gap-2">
-        <Swords className="h-6 w-6 text-success" /> Partidas
-      </h1>
+      <div>
+        <p className="eyebrow text-violet mb-1">▰▰ resultados</p>
+        <h1 className="text-3xl font-display font-bold tracking-wide flex items-center gap-3">
+          <Swords className="w-7 h-7 text-violet" /> Partidas
+        </h1>
+      </div>
 
       <Tabs defaultValue="fecha">
         <TabsList>

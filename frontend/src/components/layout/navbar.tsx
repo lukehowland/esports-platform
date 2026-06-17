@@ -1,65 +1,89 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
-import { Gamepad2, LogOut, User, Trophy, Users, Swords, BarChart3, BookOpen } from "lucide-react";
+import { usePathname } from "next/navigation";
+import { Gamepad2, LogOut, LayoutDashboard, Shield, Users, User, Trophy, Swords, BarChart3, BookOpen, Zap } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/lib/auth/context";
 import { Button } from "@/components/ui/button";
-import { isOrganizador, isCapitan } from "@/lib/auth/types";
+import { isAdmin, isOrganizador, isCapitan } from "@/lib/auth/types";
 
 const navLinks = [
-  { href: "/equipos", label: "Equipos", icon: Users },
-  { href: "/jugadores", label: "Jugadores", icon: User },
-  { href: "/torneos", label: "Torneos", icon: Trophy },
-  { href: "/videojuegos", label: "Videojuegos", icon: Gamepad2 },
-  { href: "/organizadores", label: "Organizadores", icon: Swords },
-  { href: "/partidas", label: "Partidas", icon: Swords },
-  { href: "/rankings", label: "Rankings", icon: BarChart3 },
-  { href: "/manual", label: "Manual", icon: BookOpen },
+  { href: "/equipos",       label: "Equipos",       icon: Users },
+  { href: "/jugadores",     label: "Jugadores",      icon: User },
+  { href: "/torneos",       label: "Torneos",        icon: Trophy },
+  { href: "/videojuegos",   label: "Videojuegos",    icon: Gamepad2 },
+  { href: "/organizadores", label: "Organizadores",  icon: Swords },
+  { href: "/partidas",      label: "Partidas",       icon: Zap },
+  { href: "/rankings",      label: "Rankings",       icon: BarChart3 },
+  { href: "/manual",        label: "Manual",         icon: BookOpen },
 ];
+
+function RolBadge({ identidad }: { identidad: NonNullable<ReturnType<typeof useAuth>["identidad"]> }) {
+  if (isAdmin(identidad)) {
+    return (
+      <span className="hidden sm:flex items-center gap-1 rounded px-2 py-0.5 text-xs font-mono font-semibold bg-violet/15 text-violet-bright border border-violet/30">
+        <Shield className="w-3 h-3" /> ADMIN
+      </span>
+    );
+  }
+  if (isOrganizador(identidad)) {
+    return (
+      <span className="hidden sm:flex items-center gap-1 rounded px-2 py-0.5 text-xs font-mono font-semibold bg-warning/10 text-warning border border-warning/30">
+        <Trophy className="w-3 h-3" /> ORG
+      </span>
+    );
+  }
+  if (isCapitan(identidad)) {
+    return (
+      <span className="hidden sm:flex items-center gap-1 rounded px-2 py-0.5 text-xs font-mono font-semibold bg-lime/10 text-lime border border-lime/30">
+        <Gamepad2 className="w-3 h-3" /> CAP
+      </span>
+    );
+  }
+  return (
+    <span className="hidden sm:flex items-center gap-1 rounded px-2 py-0.5 text-xs font-mono text-muted-foreground border border-line">
+      FAN
+    </span>
+  );
+}
+
+function panelLink(identidad: NonNullable<ReturnType<typeof useAuth>["identidad"]>) {
+  if (isAdmin(identidad) || isOrganizador(identidad)) return "/panel";
+  if (isCapitan(identidad)) return "/mi-equipo";
+  return null;
+}
 
 export function Navbar() {
   const pathname = usePathname();
-  const router = useRouter();
   const { identidad, logout } = useAuth();
 
-  const handleLogout = () => {
-    logout();
-    router.push("/login");
-  };
-
-  const rolLabel = identidad
-    ? isOrganizador(identidad)
-      ? `🎯 ${identidad.nombre}`
-      : isCapitan(identidad)
-      ? `🛡️ ${identidad.nombre}`
-      : "👁️ Fan"
-    : null;
+  const dashLink = identidad ? panelLink(identidad) : null;
 
   return (
-    <nav className="sticky top-0 z-40 border-b border-border bg-card/80 backdrop-blur-sm">
+    <nav className="sticky top-0 z-40 border-b border-line bg-panel/90 backdrop-blur-sm">
       <div className="container mx-auto max-w-7xl px-4">
         <div className="flex h-14 items-center justify-between gap-4">
+
           {/* Logo */}
-          <Link href="/" className="flex items-center gap-2 shrink-0">
-            <Gamepad2 className="h-6 w-6 text-primary" />
-            <span className="text-sm font-bold tracking-widest text-primary uppercase">
+          <Link href="/" className="flex items-center gap-2 shrink-0 group">
+            <Gamepad2 className="h-5 w-5 text-violet group-hover:text-violet-bright transition-colors" />
+            <span className="text-sm font-display font-bold tracking-widest text-violet group-hover:text-violet-bright uppercase transition-colors">
               Esports
             </span>
           </Link>
 
-          {/* Nav links — scrollable en móvil */}
-          <div className="flex items-center gap-0.5 overflow-x-auto scrollbar-hide flex-1 justify-center">
+          {/* Nav links */}
+          <div className="flex items-center gap-0.5 overflow-x-auto flex-1 justify-center" style={{ scrollbarWidth: "none" }}>
             {navLinks.map(({ href, label }) => (
               <Link
                 key={href}
                 href={href}
                 className={cn(
-                  "shrink-0 rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors whitespace-nowrap",
+                  "shrink-0 rounded px-2.5 py-1.5 text-xs font-semibold transition-colors whitespace-nowrap tracking-wide",
                   pathname.startsWith(href)
-                    ? "bg-secondary text-primary"
-                    : "text-muted-foreground hover:text-foreground hover:bg-secondary/50"
+                    ? "bg-violet/15 text-violet border border-violet/30"
+                    : "text-muted-foreground hover:text-foreground hover:bg-secondary/60"
                 )}
               >
                 {label}
@@ -67,14 +91,26 @@ export function Navbar() {
             ))}
           </div>
 
-          {/* Rol / auth */}
+          {/* Auth zone */}
           <div className="flex items-center gap-2 shrink-0">
             {identidad ? (
               <>
-                <span className="hidden sm:block text-xs text-muted-foreground max-w-[120px] truncate">
-                  {rolLabel}
-                </span>
-                <Button variant="ghost" size="icon" onClick={handleLogout} title="Cerrar sesión">
+                <RolBadge identidad={identidad} />
+                {dashLink && (
+                  <Link
+                    href={dashLink}
+                    className={cn(
+                      "hidden sm:flex items-center gap-1 rounded px-2 py-1.5 text-xs font-semibold transition-colors",
+                      pathname.startsWith(dashLink)
+                        ? "text-violet"
+                        : "text-muted-foreground hover:text-foreground"
+                    )}
+                    title="Mi panel"
+                  >
+                    <LayoutDashboard className="w-3.5 h-3.5" />
+                  </Link>
+                )}
+                <Button variant="ghost" size="icon" onClick={logout} title="Cerrar sesión" className="hud-clip-sm">
                   <LogOut className="h-4 w-4" />
                 </Button>
               </>
@@ -84,6 +120,7 @@ export function Navbar() {
               </Button>
             )}
           </div>
+
         </div>
       </div>
     </nav>

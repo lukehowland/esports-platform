@@ -1,168 +1,167 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
-import { useQuery } from "@tanstack/react-query";
-import { Gamepad2, Trophy, Eye, Loader2, CheckCircle2 } from "lucide-react";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
+import { Gamepad2, Loader2, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { getOrganizadores } from "@/lib/api/torneos";
-import { getEquiposPorFecha } from "@/lib/api/equipos";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { useAuth } from "@/lib/auth/context";
-import type { Identidad } from "@/lib/auth/types";
+import { ApiError } from "@/lib/api/fetcher";
 import { toast } from "sonner";
 
-type RolOpcion = "organizador" | "capitan" | "fan";
+const schema = z.object({
+  username: z.string().min(1, "Ingresá tu usuario"),
+  password: z.string().min(1, "Ingresá tu contraseña"),
+});
 
-const roles: { id: RolOpcion; title: string; desc: string; icon: React.ElementType; color: string }[] = [
-  {
-    id: "organizador",
-    title: "Organizador",
-    desc: "Creás torneos, registrás videojuegos, asignás premios y registrás partidas.",
-    icon: Trophy,
-    color: "border-warning/40 hover:border-warning/70 data-[selected=true]:border-warning data-[selected=true]:bg-warning/5",
-  },
-  {
-    id: "capitan",
-    title: "Capitán",
-    desc: "Gestionás tu equipo, agregás jugadores e inscribís el equipo en torneos.",
-    icon: Gamepad2,
-    color: "border-primary/40 hover:border-primary/70 data-[selected=true]:border-primary data-[selected=true]:bg-primary/5",
-  },
-  {
-    id: "fan",
-    title: "Fan / Visitante",
-    desc: "Acceso de solo lectura. Podés explorar rankings, equipos, torneos y partidas.",
-    icon: Eye,
-    color: "border-border hover:border-muted-foreground data-[selected=true]:border-muted-foreground data-[selected=true]:bg-secondary",
-  },
-];
+type FormData = z.infer<typeof schema>;
+
+// Accesos rápidos para demo/sustentación
+const QUICK_LOGINS = [
+  { label: "Admin",       username: "admin",    password: "admin-dev-password",  rol: "admin",       color: "border-violet/50 hover:border-violet text-violet" },
+  { label: "Organizador", username: "org_riot", password: "OrgDemo2024",          rol: "organizador", color: "border-warning/50 hover:border-warning text-warning" },
+  { label: "Capitán",     username: "cap_t1",   password: "CapDemo2024",           rol: "capitan",     color: "border-lime/50 hover:border-lime text-lime" },
+  { label: "Fan",         username: "fan_demo", password: "FanDemo2024",           rol: "fan",         color: "border-line/50 hover:border-muted-foreground text-muted-foreground" },
+] as const;
 
 export default function LoginPage() {
-  const [rolSeleccionado, setRolSeleccionado] = useState<RolOpcion | null>(null);
-  const [orgId, setOrgId] = useState("");
-  const [equipoId, setEquipoId] = useState("");
-  const router = useRouter();
-  const { setIdentidad } = useAuth();
+  const { login } = useAuth();
+  const [serverError, setServerError] = useState<string | null>(null);
+  const [quickLoading, setQuickLoading] = useState<string | null>(null);
 
-  const { data: organizadores, isLoading: loadingOrgs } = useQuery({
-    queryKey: ["organizadores"],
-    queryFn: getOrganizadores,
-    enabled: rolSeleccionado === "organizador",
+  const { register, handleSubmit, setValue, formState: { errors, isSubmitting } } = useForm<FormData>({
+    resolver: zodResolver(schema),
   });
 
-  const { data: equipos, isLoading: loadingEquipos } = useQuery({
-    queryKey: ["equipos", "por-fecha"],
-    queryFn: getEquiposPorFecha,
-    enabled: rolSeleccionado === "capitan",
-  });
-
-  const ingresar = () => {
-    let identidad: Identidad;
-
-    if (rolSeleccionado === "organizador") {
-      const org = organizadores?.find((o) => o.organizadorId === orgId);
-      if (!org) { toast.error("Seleccioná un organizador"); return; }
-      identidad = { rol: "organizador", organizadorId: org.organizadorId, nombre: org.nombre };
-    } else if (rolSeleccionado === "capitan") {
-      const equipo = equipos?.find((e) => e.equipoId === equipoId);
-      if (!equipo) { toast.error("Seleccioná un equipo"); return; }
-      identidad = { rol: "capitan", equipoId: equipo.equipoId, nombre: equipo.nombre, tag: equipo.tag };
-    } else {
-      identidad = { rol: "fan" };
+  const doLogin = async (data: FormData) => {
+    setServerError(null);
+    try {
+      await login(data.username, data.password);
+      toast.success("¡Bienvenido!");
+    } catch (err) {
+      const msg = err instanceof ApiError ? err.detail : "Error al iniciar sesión";
+      setServerError(msg);
     }
+  };
 
-    setIdentidad(identidad);
-    toast.success("¡Bienvenido!");
-    router.push("/");
+  const quickLogin = async (username: string, password: string, label: string) => {
+    setQuickLoading(label);
+    setServerError(null);
+    try {
+      await login(username, password);
+      toast.success(`¡Bienvenido como ${label}!`);
+    } catch (err) {
+      const msg = err instanceof ApiError ? err.detail : "Error al iniciar sesión";
+      setServerError(msg);
+    } finally {
+      setQuickLoading(null);
+    }
   };
 
   return (
-    <div className="max-w-xl mx-auto space-y-6 pt-8">
-      <div className="text-center">
-        <h1 className="text-2xl font-bold text-foreground">Elegí tu rol</h1>
-        <p className="text-sm text-muted-foreground mt-1">
-          Tu rol determina qué acciones podés realizar en la plataforma.
-        </p>
-      </div>
+    <div className="min-h-[calc(100vh-4rem)] flex items-center justify-center px-4">
+      <div className="w-full max-w-sm space-y-8">
 
-      <div className="space-y-3">
-        {roles.map(({ id, title, desc, icon: Icon, color }) => (
-          <Card
-            key={id}
-            data-selected={rolSeleccionado === id}
-            className={`cursor-pointer transition-colors ${color}`}
-            onClick={() => { setRolSeleccionado(id); setOrgId(""); setEquipoId(""); }}
-          >
-            <CardHeader className="py-4">
-              <div className="flex items-center gap-3">
-                <Icon className="h-5 w-5 text-muted-foreground" />
-                <div className="flex-1">
-                  <CardTitle className="text-sm">{title}</CardTitle>
-                  <CardDescription className="text-xs mt-0.5">{desc}</CardDescription>
-                </div>
-                {rolSeleccionado === id && <CheckCircle2 className="h-5 w-5 text-primary shrink-0" />}
-              </div>
-            </CardHeader>
-          </Card>
-        ))}
-      </div>
-
-      {/* Selector de identidad */}
-      {rolSeleccionado === "organizador" && (
-        <div className="space-y-2">
-          <p className="text-sm font-medium text-foreground">¿Qué organizador sos?</p>
-          {loadingOrgs ? (
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <Loader2 className="h-4 w-4 animate-spin" /> Cargando organizadores…
-            </div>
-          ) : (
-            <Select value={orgId} onValueChange={setOrgId}>
-              <SelectTrigger>
-                <SelectValue placeholder="Seleccioná un organizador…" />
-              </SelectTrigger>
-              <SelectContent>
-                {organizadores?.map((o) => (
-                  <SelectItem key={o.organizadorId} value={o.organizadorId}>
-                    {o.nombre}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          )}
+        {/* Header */}
+        <div className="text-center space-y-3">
+          <div className="inline-flex items-center justify-center w-14 h-14 rounded-xl bg-violet/10 border border-violet/30 mb-2">
+            <Gamepad2 className="w-7 h-7 text-violet" />
+          </div>
+          <h1 className="text-3xl font-display font-bold tracking-wide text-foreground">
+            INGRESAR
+          </h1>
+          <p className="text-sm text-muted-foreground">
+            Usá tus credenciales de la plataforma eSports
+          </p>
         </div>
-      )}
 
-      {rolSeleccionado === "capitan" && (
-        <div className="space-y-2">
-          <p className="text-sm font-medium text-foreground">¿Cuál es tu equipo?</p>
-          {loadingEquipos ? (
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <Loader2 className="h-4 w-4 animate-spin" /> Cargando equipos…
+        {/* Formulario real */}
+        <form onSubmit={handleSubmit(doLogin)} className="space-y-4">
+          <div className="space-y-1.5">
+            <Label htmlFor="username" className="text-xs font-mono uppercase tracking-widest text-muted-foreground">
+              Usuario
+            </Label>
+            <Input
+              id="username"
+              type="text"
+              autoComplete="username"
+              placeholder="tu_usuario"
+              {...register("username")}
+              aria-invalid={!!errors.username}
+            />
+            {errors.username && (
+              <p className="text-xs text-destructive">{errors.username.message}</p>
+            )}
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="password" className="text-xs font-mono uppercase tracking-widest text-muted-foreground">
+              Contraseña
+            </Label>
+            <Input
+              id="password"
+              type="password"
+              autoComplete="current-password"
+              placeholder="••••••••"
+              {...register("password")}
+              aria-invalid={!!errors.password}
+            />
+            {errors.password && (
+              <p className="text-xs text-destructive">{errors.password.message}</p>
+            )}
+          </div>
+
+          {serverError && (
+            <div className="rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-3">
+              <p className="text-sm text-destructive">{serverError}</p>
             </div>
-          ) : (
-            <Select value={equipoId} onValueChange={setEquipoId}>
-              <SelectTrigger>
-                <SelectValue placeholder="Seleccioná tu equipo…" />
-              </SelectTrigger>
-              <SelectContent>
-                {equipos?.map((e) => (
-                  <SelectItem key={e.equipoId} value={e.equipoId}>
-                    [{e.tag}] {e.nombre}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
           )}
-        </div>
-      )}
 
-      {rolSeleccionado && (
-        <Button className="w-full" onClick={ingresar}>
-          Ingresar
-        </Button>
-      )}
+          <Button type="submit" className="w-full" disabled={isSubmitting}>
+            {isSubmitting && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+            Iniciar sesión
+          </Button>
+        </form>
+
+        {/* Accesos rápidos demo */}
+        <div className="space-y-3">
+          <div className="flex items-center gap-3">
+            <div className="flex-1 h-px bg-line" />
+            <span className="flex items-center gap-1.5 text-xs font-mono text-muted-foreground uppercase tracking-wider">
+              <Zap className="w-3 h-3" /> Acceso rápido demo
+            </span>
+            <div className="flex-1 h-px bg-line" />
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            {QUICK_LOGINS.map(({ label, username, password, color }) => (
+              <button
+                key={label}
+                type="button"
+                disabled={!!quickLoading || isSubmitting}
+                onClick={() => {
+                  setValue("username", username);
+                  setValue("password", password);
+                  quickLogin(username, password, label);
+                }}
+                className={`rounded-lg border px-3 py-2 text-xs font-mono font-semibold uppercase tracking-wider transition-colors ${color} disabled:opacity-50 disabled:cursor-not-allowed`}
+              >
+                {quickLoading === label ? (
+                  <span className="flex items-center justify-center gap-1">
+                    <Loader2 className="w-3 h-3 animate-spin" /> {label}
+                  </span>
+                ) : label}
+              </button>
+            ))}
+          </div>
+          <p className="text-center text-xs text-muted-foreground/60">
+            Credenciales de demo — solo para presentación académica
+          </p>
+        </div>
+
+      </div>
     </div>
   );
 }

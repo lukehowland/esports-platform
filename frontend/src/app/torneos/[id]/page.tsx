@@ -133,10 +133,10 @@ function AsignarPremioDialog({ torneoId }: { torneoId: string }) {
           <div className="space-y-1">
             <Label>Equipo ganador (opcional)</Label>
             <Controller control={control} name="equipoId" render={({ field }) => (
-              <Select value={field.value ?? ""} onValueChange={field.onChange}>
+              <Select value={field.value ?? "__none__"} onValueChange={(v) => field.onChange(v === "__none__" ? undefined : v)}>
                 <SelectTrigger><SelectValue placeholder="Sin asignar" /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">Sin asignar</SelectItem>
+                  <SelectItem value="__none__">Sin asignar</SelectItem>
                   {equiposTorneo?.map((e) => (
                     <SelectItem key={e.equipoId} value={e.equipoId}>{e.nombreEquipo}</SelectItem>
                   ))}

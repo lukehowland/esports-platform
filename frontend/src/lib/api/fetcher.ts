@@ -1,3 +1,5 @@
+import { getToken } from "@/lib/auth/token";
+
 export interface ProblemDetails {
   title?: string;
   status?: number;
@@ -18,10 +20,27 @@ export class ApiError extends Error {
 }
 
 export async function fetcher<T>(path: string, options?: RequestInit): Promise<T> {
+  const token = getToken();
+
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    ...(options?.headers as Record<string, string>),
+  };
+
+  if (token) {
+    headers["Authorization"] = `Bearer ${token}`;
+  }
+
   const res = await fetch(path, {
-    headers: { "Content-Type": "application/json", ...options?.headers },
     ...options,
+    headers,
   });
+
+  // 401 global: token expirado o inválido — el AuthProvider lo maneja vía onUnauthorized
+  if (res.status === 401 && token) {
+    // Dispara evento para que el AuthProvider cierre sesión
+    window.dispatchEvent(new Event("esports:unauthorized"));
+  }
 
   if (!res.ok) {
     let problem: ProblemDetails = {};

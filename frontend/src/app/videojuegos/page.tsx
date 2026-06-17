@@ -7,16 +7,15 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { Gamepad2, Plus, ChevronDown, ChevronRight } from "lucide-react";
 import { toast } from "sonner";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import { EmptyState } from "@/components/empty-state";
 import { ErrorState } from "@/components/error-state";
+import { HudPanel, HudEyebrow } from "@/components/hud-panel";
 import { getVideojuegosPorGenero, getTorneosPorVideojuego, crearVideojuego } from "@/lib/api/torneos";
 import { useAuth } from "@/lib/auth/context";
 import { isOrganizador } from "@/lib/auth/types";
@@ -132,24 +131,27 @@ export default function VideojuegosPage() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between gap-4 flex-wrap">
-        <h1 className="text-2xl font-bold text-foreground flex items-center gap-2">
-          <Gamepad2 className="h-6 w-6 text-primary" /> Videojuegos
-        </h1>
+        <div>
+          <p className="eyebrow text-violet mb-1">▰▰ catálogo</p>
+          <h1 className="text-3xl font-display font-bold tracking-wide flex items-center gap-3">
+            <Gamepad2 className="w-7 h-7 text-violet" /> Videojuegos
+          </h1>
+        </div>
         {esOrganizador && (
           <CrearVideojuegoDialog onSuccess={() => qc.invalidateQueries({ queryKey: ["videojuegos", generoSeleccionado] })} />
         )}
       </div>
 
       {/* Selector de género */}
-      <div className="flex flex-wrap gap-2">
+      <div className="flex flex-wrap gap-1.5">
         {GENEROS.map((g) => (
           <button
             key={g}
             onClick={() => setGeneroSeleccionado(g)}
-            className={`rounded-full px-3 py-1 text-xs font-medium transition-colors border ${
+            className={`eyebrow px-2 py-0.5 rounded hud-clip-sm border text-xs transition-colors ${
               generoSeleccionado === g
-                ? "bg-primary text-primary-foreground border-primary"
-                : "border-border text-muted-foreground hover:text-foreground hover:border-foreground"
+                ? "border-violet/60 bg-violet/15 text-violet"
+                : "border-line bg-elevated text-muted-foreground hover:text-foreground hover:border-violet/30"
             }`}
           >
             {g}
@@ -157,31 +159,32 @@ export default function VideojuegosPage() {
         ))}
       </div>
 
-      {isLoading ? (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {[...Array(4)].map((_, i) => <Skeleton key={i} className="h-32" />)}
+      <HudPanel>
+        <div className="px-4 py-3 border-b border-line">
+          <HudEyebrow>{generoSeleccionado} — {data?.length ?? "…"} juegos</HudEyebrow>
         </div>
-      ) : error ? <ErrorState error={error} onRetry={refetch} /> :
-      data?.length === 0 ? (
-        <EmptyState title={`Sin videojuegos en ${generoSeleccionado}`} description="No hay videojuegos registrados en este género." />
-      ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {data?.map((vg) => (
-            <Card key={vg.videojuegoId}>
-              <CardHeader className="pb-2">
-                <div className="flex items-center gap-2">
-                  <Gamepad2 className="h-4 w-4 text-primary" />
-                  <CardTitle className="text-sm">{vg.nombre}</CardTitle>
+        {isLoading ? (
+          <div className="p-4 space-y-2">{[...Array(4)].map((_, i) => <Skeleton key={i} className="h-16" />)}</div>
+        ) : error ? <ErrorState error={error} onRetry={refetch} /> :
+        data?.length === 0 ? (
+          <EmptyState title={`Sin videojuegos en ${generoSeleccionado}`} description="No hay videojuegos registrados en este género." />
+        ) : (
+          <div className="divide-y divide-line">
+            {data?.map((vg) => (
+              <div key={vg.videojuegoId} className="px-4 py-3">
+                <div className="flex items-center gap-2 mb-1">
+                  <Gamepad2 className="h-4 w-4 text-violet" />
+                  <p className="font-semibold text-foreground">{vg.nombre}</p>
+                  <span className="hud-clip-sm border border-violet/30 bg-violet/10 text-violet font-mono text-xs px-2 py-0.5 ml-auto">
+                    {generoSeleccionado}
+                  </span>
                 </div>
-                <Badge variant="secondary" className="w-fit text-xs">{generoSeleccionado}</Badge>
-              </CardHeader>
-              <CardContent>
                 <TorneosPorVideojuego videojuegoId={vg.videojuegoId} nombre={vg.nombre} />
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      )}
+              </div>
+            ))}
+          </div>
+        )}
+      </HudPanel>
     </div>
   );
 }

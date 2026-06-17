@@ -7,7 +7,6 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { Building2, Plus, ChevronDown, ChevronRight } from "lucide-react";
 import { toast } from "sonner";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -15,6 +14,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Skeleton } from "@/components/ui/skeleton";
 import { EmptyState } from "@/components/empty-state";
 import { ErrorState } from "@/components/error-state";
+import { HudPanel, HudEyebrow } from "@/components/hud-panel";
 import { getOrganizadores, getTorneosPorOrganizador, crearOrganizador } from "@/lib/api/torneos";
 import { useAuth } from "@/lib/auth/context";
 import { isOrganizador } from "@/lib/auth/types";
@@ -102,34 +102,36 @@ export default function OrganizadoresPage() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between gap-4 flex-wrap">
-        <h1 className="text-2xl font-bold text-foreground flex items-center gap-2">
-          <Building2 className="h-6 w-6 text-primary" /> Organizadores
-        </h1>
+        <div>
+          <p className="eyebrow text-violet mb-1">▰▰ organizadores</p>
+          <h1 className="text-3xl font-display font-bold tracking-wide flex items-center gap-3">
+            <Building2 className="w-7 h-7 text-violet" /> Organizadores
+          </h1>
+        </div>
         {esOrg && <CrearOrganizadorDialog onSuccess={() => qc.invalidateQueries({ queryKey: ["organizadores"] })} />}
       </div>
 
-      {isLoading ? (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {[...Array(3)].map((_, i) => <Skeleton key={i} className="h-28" />)}
+      <HudPanel>
+        <div className="px-4 py-3 border-b border-line">
+          <HudEyebrow>{data?.length ?? "…"} organizadores</HudEyebrow>
         </div>
-      ) : error ? <ErrorState error={error} onRetry={refetch} /> :
-      data?.length === 0 ? <EmptyState title="Sin organizadores" description="No hay organizadores registrados." /> : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {data?.map((org) => (
-            <Card key={org.organizadorId}>
-              <CardHeader className="pb-2">
-                <div className="flex items-center gap-2">
-                  <Building2 className="h-4 w-4 text-primary" />
-                  <CardTitle className="text-sm">{org.nombre}</CardTitle>
+        {isLoading ? (
+          <div className="p-4 space-y-2">{[...Array(3)].map((_, i) => <Skeleton key={i} className="h-16" />)}</div>
+        ) : error ? <ErrorState error={error} onRetry={refetch} /> :
+        data?.length === 0 ? <EmptyState title="Sin organizadores" description="No hay organizadores registrados." /> : (
+          <div className="divide-y divide-line">
+            {data?.map((org) => (
+              <div key={org.organizadorId} className="px-4 py-3">
+                <div className="flex items-center gap-2 mb-1">
+                  <Building2 className="h-4 w-4 text-violet" />
+                  <p className="font-semibold text-foreground">{org.nombre}</p>
                 </div>
-              </CardHeader>
-              <CardContent>
                 <TorneosOrganizador organizadorId={org.organizadorId} nombre={org.nombre} />
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      )}
+              </div>
+            ))}
+          </div>
+        )}
+      </HudPanel>
     </div>
   );
 }

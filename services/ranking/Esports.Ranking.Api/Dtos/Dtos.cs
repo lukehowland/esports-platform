@@ -7,7 +7,7 @@ public record RankingEquipoResponse(Guid EquipoId, long TotalTorneos);
 public record RankingVictoriasResponse(Guid EquipoId, long TotalVictorias);
 
 // Q23: jugadores más activos
-public record RankingJugadorResponse(Guid JugadorId, long TotalTorneos);
+public record RankingJugadorResponse(Guid JugadorId, long TotalTorneos, string? NombreJugador = null);
 
 // Q24: estadísticas de un equipo en un torneo
 public record StatsEquipoTorneoResponse(

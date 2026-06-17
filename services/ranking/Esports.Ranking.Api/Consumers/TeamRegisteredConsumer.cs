@@ -24,8 +24,11 @@ public class TeamRegisteredConsumer : IConsumer<TeamRegisteredToTournament>
         // Q7: +1 torneo para el equipo
         await _repo.IncrementarTorneosEquipoAsync(evt.EquipoId);
 
-        // Q23: +1 torneo para cada jugador del roster
-        foreach (var jugadorId in evt.JugadorIds)
-            await _repo.IncrementarTorneosJugadorAsync(jugadorId);
+        // Q23: +1 torneo para cada jugador del roster + guardar meta (nickname)
+        foreach (var jugador in evt.Jugadores)
+        {
+            await _repo.IncrementarTorneosJugadorAsync(jugador.Id);
+            await _repo.GuardarMetaJugadorAsync(jugador.Id, jugador.Nickname);
+        }
     }
 }

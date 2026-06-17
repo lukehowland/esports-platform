@@ -109,21 +109,23 @@ public class PartidaService : IPartidaService
         var localBarons = objectives.Count(o => o.TeamTag == "T1" && o.Type == "baron");
         var visitorBarons = objectives.Count(o => o.TeamTag == "GEN" && o.Type == "baron");
 
+        // T1 arranca por detras en mapa y, con la remontada, supera a Gen.G en torres.
         var localTowers = elapsed switch
         {
-            >= 1740 => 8,
-            >= 1680 => 7,
-            >= 1500 => 5,
-            >= 1260 => 4,
-            >= 840 => 2,
-            >= 660 => 1,
+            >= 1740 => 11,
+            >= 1620 => 10,
+            >= 1470 => 8,
+            >= 1230 => 6,
+            >= 1020 => 4,
+            >= 760 => 2,
             _ => 0
         };
         var visitorTowers = elapsed switch
         {
-            >= 1660 => 3,
-            >= 1020 => 2,
-            >= 720 => 1,
+            >= 1740 => 4,
+            >= 1200 => 3,
+            >= 760 => 2,
+            >= 400 => 1,
             _ => 0
         };
 
@@ -190,42 +192,60 @@ public class PartidaService : IPartidaService
 
     private static string NarrativeFor(int elapsed, int goldDiff)
     {
-        if (elapsed < 240)
-            return "Lineas estables, ambos equipos priorizan vision y control de oleadas.";
-        if (elapsed < 720)
-            return "T1 acelera el mapa con primer dragon y presion desde mid-jungle.";
-        if (elapsed < 1200)
-            return "Gen.G responde por side lanes, pero T1 conserva la iniciativa por objetivos.";
-        if (elapsed < 1560)
-            return $"T1 llega al mid game con {Math.Abs(goldDiff):N0} de diferencia de oro y setup de Baron.";
+        if (elapsed < 300)
+            return "Gen.G sale agresivo y domina los primeros duelos: el lado rojo manda 0-2 en kills.";
+        if (elapsed < 700)
+            return "T1 responde con macro, asegura el primer dragon al minuto 5 y estabiliza las lineas.";
+        if (elapsed < 1020)
+            return "Intercambio parejo por el mapa; T1 empata con Heraldo y objetivos e inicia la remontada.";
+        if (elapsed < 1410)
+            return $"T1 completa la remontada y toma la delantera con {Math.Abs(goldDiff):N0} de oro a favor.";
+        if (elapsed < 1740)
+            return "T1 controla alma de dragon y Baron; presiona las calles laterales de Gen.G.";
         if (elapsed < 1800)
-            return "T1 usa Baron para romper la base y forzar la pelea final.";
-        return "T1 cierra la simulacion con control de vision, Baron y pelea decisiva en base.";
+            return "T1 abre la base con segundo Baron e inhibidores rumbo al nexo de Gen.G.";
+        return "T1 sentencia la simulacion: remontada completada y nexo de Gen.G derribado.";
     }
 
     private static readonly LiveMoment[] LiveMoments =
     [
         new(0, "SYSTEM", "start", "Minions en la grieta. Score inicial 0-0.", 0, 0),
-        new(260, "T1", "kill", "Faker encuentra first blood en mid tras gank de jungle.", 1, 0),
-        new(300, "T1", "objective", "T1 asegura el primer dragon al minuto 5.", 0, 0),
-        new(445, "T1", "kill", "T1 castiga la rotacion de soporte y amplifica la ventaja.", 1, 0),
-        new(520, "GEN", "kill", "Gen.G responde con pick sobre bot side.", 0, 1),
-        new(780, "T1", "fight", "T1 gana la pelea por Heraldo y convierte placas en oro.", 2, 1),
-        new(930, "GEN", "fight", "Gen.G encuentra dos bajas en side lane y reduce la diferencia.", 0, 2),
-        new(1080, "T1", "objective", "Segundo dragon para T1; la condicion de alma queda abierta.", 0, 0),
-        new(1260, "T1", "fight", "T1 gana pelea en rio y derriba la torre central.", 3, 1),
-        new(1500, "T1", "baron", "T1 asegura Baron Nashor despues de forzar teleport de Gen.G.", 2, 1),
-        new(1660, "GEN", "pick", "Gen.G consigue dos picks defensivos y retrasa el cierre.", 0, 2),
-        new(1740, "T1", "fight", "T1 ejecuta la pelea final con engage frontal y control de carries.", 5, 1)
+        // Fase temprana: Gen.G sale agresivo y se va arriba 0-2 antes del minuto 5.
+        new(95, "GEN", "kill", "Gen.G abre el marcador con first blood en bot lane.", 0, 1),
+        new(215, "GEN", "kill", "Segundo gank de Gen.G por top; el lado rojo manda 0-2.", 0, 1),
+        new(300, "T1", "objective", "T1 responde con macro y asegura el primer dragon al minuto 5.", 0, 0),
+        new(385, "GEN", "fight", "Gen.G gana la pelea por el rio y estira la ventaja temprana.", 0, 2),
+        new(470, "T1", "kill", "T1 castiga la sobre-extension de Gen.G y consigue dos picks.", 2, 0),
+        new(560, "GEN", "objective", "Gen.G roba el segundo dragon y mantiene el control de oro.", 0, 0),
+        new(615, "T1", "fight", "Intercambio parejo en mid; T1 encuentra una baja mas.", 2, 1),
+        new(700, "T1", "objective", "T1 toma el Heraldo de la grieta y abre presion en top.", 0, 0),
+        new(760, "T1", "fight", "T1 convierte el Heraldo en torre y empieza la remontada.", 3, 1),
+        new(880, "GEN", "fight", "Gen.G responde por side lanes y empata la pelea de kills.", 1, 2),
+        new(960, "T1", "objective", "Segundo dragon para T1; la condicion de alma queda abierta.", 0, 0),
+        new(1020, "T1", "fight", "T1 gana el teamfight de mid game y toma la delantera.", 3, 1),
+        new(1140, "GEN", "pick", "Gen.G logra un pick defensivo y retrasa el cierre.", 1, 2),
+        new(1230, "T1", "fight", "T1 domina la pelea por el medio y amplia la ventaja en kills.", 4, 1),
+        new(1300, "T1", "objective", "T1 cierra el alma del dragon y escala su composicion.", 0, 0),
+        new(1410, "T1", "baron", "T1 asegura Baron Nashor tras forzar el teleport de Gen.G.", 0, 0),
+        new(1470, "T1", "fight", "Con Baron en mano T1 asedia y consigue cuatro bajas.", 4, 2),
+        new(1560, "GEN", "fight", "Gen.G gana una pelea defensiva y aguanta en su base.", 2, 3),
+        new(1620, "T1", "objective", "T1 derriba el inhibidor central y libera super-minions.", 0, 0),
+        new(1660, "T1", "objective", "T1 captura el Dragon anciano antes del asalto final.", 0, 0),
+        new(1700, "T1", "baron", "Segundo Baron para T1; el cierre es cuestion de tiempo.", 0, 0),
+        new(1740, "T1", "fight", "T1 ejecuta la pelea final con engage frontal sobre el nexo.", 6, 1)
     ];
 
     private static readonly LiveObjective[] LiveObjectives =
     [
         new(300, "dragon", "Dragon infernal", "T1"),
-        new(780, "herald", "Heraldo de la grieta", "T1"),
-        new(1080, "dragon", "Dragon de montana", "T1"),
-        new(1500, "baron", "Baron Nashor", "T1"),
-        new(1680, "inhibitor", "Inhibidor central", "T1")
+        new(560, "dragon", "Dragon de oceano", "GEN"),
+        new(700, "herald", "Heraldo de la grieta", "T1"),
+        new(960, "dragon", "Dragon de montana", "T1"),
+        new(1300, "dragon", "Alma del dragon", "T1"),
+        new(1410, "baron", "Baron Nashor", "T1"),
+        new(1620, "inhibitor", "Inhibidor central", "T1"),
+        new(1660, "dragon", "Dragon anciano", "T1"),
+        new(1700, "baron", "Segundo Baron Nashor", "T1")
     ];
 
     private sealed record LiveMoment(int Second, string TeamTag, string Type, string Text, int LocalKills, int VisitorKills);

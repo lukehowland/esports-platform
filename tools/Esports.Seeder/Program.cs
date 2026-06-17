@@ -60,8 +60,11 @@ internal static class SeederApp
             foreach (var teamKey in tournament.TeamKeys)
                 await EnsureInscripcionAsync(http, createdTournament, teams[teamKey]);
 
-            await EnsurePrizePackAsync(http, createdTournament, tournament, teams);
-            await EnsureMatchesAsync(http, createdTournament, tournament, teams);
+            if (tournament.GeneratePrizePack)
+                await EnsurePrizePackAsync(http, createdTournament, tournament, teams);
+
+            if (tournament.GenerateMatches)
+                await EnsureMatchesAsync(http, createdTournament, tournament, teams);
         }
 
         await WaitForRankingAsync(http);
@@ -495,6 +498,14 @@ internal static class SeedData
         new("LOL_BLG", "Bilibili Gaming", "BLG", "CN", "LOL", ["CN"]),
         new("LOL_TES", "Top Esports", "TES", "CN", "LOL", ["CN"]),
         new("LOL_HLE", "Hanwha Life Esports", "HLE", "KR", "LOL", ["KR"]),
+        new("LOL_GENG", "Gen.G", "GEN", "KR", "LOL", ["KR"],
+            [
+                new PlayerSeed("Kiin",   "Kim Gi-in",     "KR", "TOP"),
+                new PlayerSeed("Canyon", "Kim Geon-bu",   "KR", "JUNGLE"),
+                new PlayerSeed("Chovy",  "Jeong Ji-hoon", "KR", "MID"),
+                new PlayerSeed("Ruler",  "Park Jae-hyuk", "KR", "ADC"),
+                new PlayerSeed("Duro",   "Joo Min-kyu",   "KR", "SUPPORT")
+            ]),
         new("LOL_T1", "T1", "T1", "KR", "LOL", ["KR"],
             [
                 new PlayerSeed("Faker",    "Lee Sang-hyeok", "KR", "MID"),
@@ -560,6 +571,8 @@ internal static class SeedData
             ["LOL_T1", "LOL_G2", "LOL_FNC", "LOL_BLG", "LOL_TES", "LOL_HLE", "LOL_FURIA", "LOL_TLAW", "LOL_TSW", "LOL_KC"]),
         new("LOL_LEC26", "LEC Summer 2026", "LEC-SUM26", "LOL", "LOLE", "2026-07-25T17:00:00Z", 120000m,
             ["LOL_G2", "LOL_KC", "LOL_FNC", "LOL_TLAW", "LOL_HLE", "LOL_BLG", "LOL_T1", "LOL_TES"]),
+        new("LOL_RIFT_LIVE26", "Rift Live Showcase 2026", "RIFT-LIVE26", "LOL", "RIOT", "2026-06-17T20:00:00Z", 0m,
+            ["LOL_T1", "LOL_GENG"], GeneratePrizePack: false, GenerateMatches: false),
 
         new("VAL_CHAMP25", "VALORANT Champions Paris 2025", "VCT-CHAMP25", "VAL", "VCT", "2025-09-12T15:00:00Z", 1000000m,
             ["VAL_G2", "VAL_SEN", "VAL_MIBR", "VAL_NRG", "VAL_PRX", "VAL_T1", "VAL_RRQ", "VAL_KRX", "VAL_FNC", "VAL_TL", "VAL_GX", "VAL_TH", "VAL_BLG", "VAL_EDG", "VAL_XLG", "VAL_DRG"]),
@@ -666,7 +679,17 @@ internal sealed record GameSeed(string Code, string Nombre, string Genero);
 internal sealed record OrganizerSeed(string Code, string Nombre);
 internal sealed record TeamSeed(string Key, string Nombre, string Tag, string Pais, string GameCode, string[] PlayerCountries, PlayerSeed[]? Players = null);
 internal sealed record PlayerSeed(string Nickname, string Nombre, string Pais, string Rol);
-internal sealed record TournamentSeed(string Key, string Nombre, string Codigo, string GameCode, string OrganizerCode, string FechaInicio, decimal BasePrize, string[] TeamKeys);
+internal sealed record TournamentSeed(
+    string Key,
+    string Nombre,
+    string Codigo,
+    string GameCode,
+    string OrganizerCode,
+    string FechaInicio,
+    decimal BasePrize,
+    string[] TeamKeys,
+    bool GeneratePrizePack = true,
+    bool GenerateMatches = true);
 internal sealed record PrizeSeed(string Tipo, decimal Monto, Guid EquipoId);
 internal sealed record GeneratedMatch(EquipoResponse Local, EquipoResponse Visitante, EquipoResponse Ganador, string Resultado, DateTimeOffset Fecha);
 

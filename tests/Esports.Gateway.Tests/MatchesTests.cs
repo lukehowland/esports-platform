@@ -8,6 +8,57 @@ namespace Esports.Gateway.Tests;
 [Collection("Gateway")]
 public class MatchesTests(GatewayFixture fix, ITestOutputHelper output)
 {
+    // ─── Showcase live: endpoint no histórico para home ────────────────────────
+
+    [Fact]
+    public async Task LiveShowcase_Minuto0_DevuelveT1VsGenG_ConScoreInicial()
+    {
+        var r = await fix.Http.GetAsync("/api/partidas/en-vivo/destacada?elapsedSeconds=0");
+
+        Assert.Equal(HttpStatusCode.OK, r.StatusCode);
+        var doc = GatewayFixture.ParseJson(await r.Content.ReadAsStringAsync());
+
+        Assert.Equal("RIFT-LIVE26", doc.GetProperty("torneoCodigo").GetString());
+        Assert.Equal("League of Legends", doc.GetProperty("videojuego").GetString());
+        Assert.Equal(1800, doc.GetProperty("duracionSegundos").GetInt32());
+        Assert.Equal(0, doc.GetProperty("segundoActual").GetInt32());
+        Assert.Equal("00:00", doc.GetProperty("reloj").GetString());
+        Assert.Equal("T1", doc.GetProperty("local").GetProperty("tag").GetString());
+        Assert.Equal("GEN", doc.GetProperty("visitante").GetProperty("tag").GetString());
+        Assert.Equal(0, doc.GetProperty("local").GetProperty("kills").GetInt32());
+        Assert.Equal(0, doc.GetProperty("visitante").GetProperty("kills").GetInt32());
+    }
+
+    [Fact]
+    public async Task LiveShowcase_Minuto5_IncluyeDragonDeT1()
+    {
+        var r = await fix.Http.GetAsync("/api/partidas/en-vivo/destacada?elapsedSeconds=300");
+
+        Assert.Equal(HttpStatusCode.OK, r.StatusCode);
+        var doc = GatewayFixture.ParseJson(await r.Content.ReadAsStringAsync());
+        var objectives = doc.GetProperty("objetivos").EnumerateArray().ToList();
+
+        Assert.Equal("05:00", doc.GetProperty("reloj").GetString());
+        Assert.Equal(1, doc.GetProperty("local").GetProperty("dragones").GetInt32());
+        Assert.Contains(objectives, o =>
+            o.GetProperty("tipo").GetString() == "dragon" &&
+            o.GetProperty("equipoTag").GetString() == "T1" &&
+            o.GetProperty("segundo").GetInt32() == 300);
+    }
+
+    [Fact]
+    public async Task LiveShowcase_TorneoSeed_TieneT1YGenGInscritos()
+    {
+        var r = await fix.Http.GetAsync($"/api/torneos/{fix.RiftLiveId}/equipos");
+
+        Assert.Equal(HttpStatusCode.OK, r.StatusCode);
+        var arr = GatewayFixture.ParseJson(await r.Content.ReadAsStringAsync());
+        var ids = arr.EnumerateArray().Select(e => e.GetProperty("equipoId").GetGuid()).ToList();
+
+        Assert.Contains(fix.T1Id, ids);
+        Assert.Contains(fix.GENId, ids);
+    }
+
     // ─── Q16: Partidas por torneo ───────────────────────────────────────────────
 
     [Fact]

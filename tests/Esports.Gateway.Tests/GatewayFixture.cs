@@ -13,6 +13,7 @@ public class GatewayFixture : IAsyncLifetime
 
     // Equipos (LoL)
     public Guid T1Id   { get; private set; }
+    public Guid GENId  { get; private set; }
     public Guid FNCId  { get; private set; }
     public Guid G2Id   { get; private set; }
     public Guid FurId  { get; private set; }   // FURIA LoL — no tiene premios
@@ -26,6 +27,7 @@ public class GatewayFixture : IAsyncLifetime
     public Guid MSIId       { get; private set; }   // MSI26
     public Guid IEMId       { get; private set; }   // IEM-COL26
     public Guid BLASTAus25Id { get; private set; }  // BLAST-AUS25
+    public Guid RiftLiveId   { get; private set; }  // RIFT-LIVE26
 
     // Videojuegos
     public Guid LoLId   { get; private set; }
@@ -58,6 +60,7 @@ public class GatewayFixture : IAsyncLifetime
         AdminToken = await LoginAsync("admin", "admin-dev-password");
 
         T1Id   = await GetTeamIdByTagAsync("T1");
+        GENId  = await GetTeamIdByTagAsync("GEN");
         FNCId  = await GetTeamIdByTagAsync("FNC");
         G2Id   = await GetTeamIdByTagAsync("G2");
         FurId  = await GetTeamIdByTagAsync("FUR");
@@ -68,6 +71,7 @@ public class GatewayFixture : IAsyncLifetime
         MSIId        = await GetTournamentIdByCodeAsync("MSI26");
         IEMId        = await GetTournamentIdByCodeAsync("IEM-COL26");
         BLASTAus25Id = await GetTournamentIdByCodeAsync("BLAST-AUS25");
+        RiftLiveId   = await GetTournamentIdByCodeAsync("RIFT-LIVE26");
 
         (LoLId, Dota2Id) = await GetMobaIdsAsync();
         (CS2Id, ValId)   = await GetFpsIdsAsync();

@@ -83,6 +83,10 @@ public class PartidasController : ControllerBase
         return result is null ? NotFound() : Ok(result);
     }
 
+    [HttpGet("en-vivo/destacada")]
+    public IActionResult EnVivoDestacada([FromQuery] int? elapsedSeconds = null)
+        => Ok(_svc.ObtenerEnVivoDestacada(elapsedSeconds));
+
     // Q16: partidas de un torneo (cronológico)
     [HttpGet("por-torneo/{torneoId:guid}")]
     public async Task<IActionResult> PorTorneo(Guid torneoId)

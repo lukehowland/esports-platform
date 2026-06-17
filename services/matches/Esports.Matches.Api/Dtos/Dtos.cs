@@ -55,3 +55,47 @@ public record PartidaPorRivalesResponse(
     Guid EquipoLocalId,
     string Resultado,
     DateTimeOffset Fecha);
+
+public record LiveTeamState(
+    string EquipoId,
+    string Nombre,
+    string Tag,
+    string Pais,
+    int Kills,
+    int Torres,
+    int Dragones,
+    int Barones,
+    int Oro,
+    int OroPorMinuto,
+    bool VaGanando);
+
+public record LiveObjectiveEvent(
+    int Segundo,
+    string Minuto,
+    string Tipo,
+    string Nombre,
+    string EquipoTag);
+
+public record LiveTimelineEvent(
+    int Segundo,
+    string Minuto,
+    string EquipoTag,
+    string Tipo,
+    string Texto,
+    int LocalKills,
+    int VisitanteKills);
+
+public record LiveMatchResponse(
+    string MatchId,
+    string Estado,
+    int DuracionSegundos,
+    int SegundoActual,
+    string Reloj,
+    string Videojuego,
+    string TorneoCodigo,
+    string TorneoNombre,
+    LiveTeamState Local,
+    LiveTeamState Visitante,
+    IReadOnlyList<LiveObjectiveEvent> Objetivos,
+    IReadOnlyList<LiveTimelineEvent> Timeline,
+    string Narrativa);

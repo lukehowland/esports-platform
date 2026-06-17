@@ -131,7 +131,7 @@ Como **fan**, quiero ver las partidas de un torneo en orden cronológico, para s
 
 **HU-25A — Ver una partida destacada en vivo**
 Como **visitante**, quiero ver una partida destacada simulada con marcador, oro y objetivos en tiempo real, para entender inmediatamente que la plataforma cubre experiencia de torneo en curso.
-- *Criterios:* la partida dura 30 minutos, inicia 0-0, aumenta oro de ambos equipos y al minuto 5 registra dragon para T1.
+- *Criterios:* la partida dura 30 minutos, inicia 0-0, aumenta oro de ambos equipos y al minuto 5 registra dragon para T1. La simulación cuenta una remontada: Gen.G domina los primeros 5 minutos (0-2 en kills) y T1 da la vuelta al marcador con dragones, Heraldo, Barón y torres hasta cerrar la partida.
 - *Endpoint:* `GET /api/partidas/en-vivo/destacada`.
 
 **HU-26 — Ver el historial de partidas de un equipo**

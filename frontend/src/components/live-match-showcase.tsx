@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { Activity, Crown, Flame, Gauge, Radio, Shield, Swords, Timer, Trophy, Zap } from "lucide-react";
 import { HudEyebrow, HudPanel } from "@/components/hud-panel";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -100,6 +100,11 @@ export function LiveMatchShowcase() {
     queryKey: ["partidas", "en-vivo", "destacada", elapsed],
     queryFn: () => getPartidaEnVivoDestacada(elapsed),
     staleTime: 0,
+    // Cada segundo cambia `elapsed` y, por tanto, la queryKey. Sin esto React Query
+    // descartaria los datos previos en cada tick y el Skeleton parpadearia sobre el
+    // tema oscuro. keepPreviousData mantiene el frame anterior hasta que llega el
+    // nuevo estado, y las barras/relojes interpolan con sus transiciones CSS.
+    placeholderData: keepPreviousData,
   });
 
   useEffect(() => {

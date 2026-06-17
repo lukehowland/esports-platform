@@ -117,7 +117,7 @@ function OrgOverview({ organizadorId }: { organizadorId: string }) {
           {torneos.slice(0, 5).map((t) => (
             <Link
               key={t.torneoId}
-              href={`/torneos/${t.torneoId}`}
+              href={`/panel/torneos/${t.torneoId}`}
               className="flex items-center justify-between px-4 py-3 hover:bg-secondary/40 transition-colors"
             >
               <div>

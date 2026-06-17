@@ -1,89 +1,21 @@
 "use client";
 
 import { useState } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { z } from "zod";
-import { Plus, Search, Users, Flag } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import { Search, Users, Flag, ChevronRight } from "lucide-react";
 import Link from "next/link";
-import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import { EmptyState } from "@/components/empty-state";
 import { ErrorState } from "@/components/error-state";
 import { HudPanel, HudEyebrow } from "@/components/hud-panel";
-import { getEquiposPorFecha, getEquipoPorTag, crearEquipo } from "@/lib/api/equipos";
-import { useAuth } from "@/lib/auth/context";
-import { isCapitan } from "@/lib/auth/types";
+import { getEquiposPorFecha, getEquipoPorTag } from "@/lib/api/equipos";
 import { formatDate } from "@/lib/utils";
-import type { ApiError } from "@/lib/api/fetcher";
-
-const equipoSchema = z.object({
-  nombre: z.string().min(1, "Requerido").max(100),
-  tag:    z.string().min(1, "Requerido").max(10, "Máx 10 caracteres"),
-  pais:   z.string().min(1, "Requerido"),
-});
-type EquipoForm = z.infer<typeof equipoSchema>;
-
-function CrearEquipoDialog() {
-  const [open, setOpen] = useState(false);
-  const qc = useQueryClient();
-  const { register, handleSubmit, formState: { errors }, reset } = useForm<EquipoForm>({
-    resolver: zodResolver(equipoSchema),
-  });
-
-  const mutation = useMutation({
-    mutationFn: crearEquipo,
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["equipos"] });
-      toast.success("Equipo creado");
-      setOpen(false);
-      reset();
-    },
-    onError: (e: ApiError) => toast.error(e.detail),
-  });
-
-  return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        <Button size="sm"><Plus className="h-4 w-4 mr-1" />Crear equipo</Button>
-      </DialogTrigger>
-      <DialogContent>
-        <DialogHeader><DialogTitle>Nuevo equipo</DialogTitle></DialogHeader>
-        <form onSubmit={handleSubmit((d) => mutation.mutate(d))} className="space-y-4 mt-2">
-          <div className="space-y-1.5">
-            <Label className="eyebrow">Nombre del equipo</Label>
-            <Input {...register("nombre")} placeholder="Tigres eSports" />
-            {errors.nombre && <p className="text-xs text-destructive">{errors.nombre.message}</p>}
-          </div>
-          <div className="space-y-1.5">
-            <Label className="eyebrow">Tag</Label>
-            <Input {...register("tag")} placeholder="TIG" />
-            {errors.tag && <p className="text-xs text-destructive">{errors.tag.message}</p>}
-          </div>
-          <div className="space-y-1.5">
-            <Label className="eyebrow">País</Label>
-            <Input {...register("pais")} placeholder="Bolivia" />
-            {errors.pais && <p className="text-xs text-destructive">{errors.pais.message}</p>}
-          </div>
-          <Button type="submit" className="w-full" disabled={mutation.isPending}>
-            {mutation.isPending ? "Creando…" : "Crear equipo"}
-          </Button>
-        </form>
-      </DialogContent>
-    </Dialog>
-  );
-}
 
 export default function EquiposPage() {
   const [busquedaTag, setBusquedaTag] = useState("");
   const [tagBuscado, setTagBuscado] = useState("");
-  const { identidad } = useAuth();
-  const esCapitan = isCapitan(identidad);
 
   const { data: equipos, isLoading, error, refetch } = useQuery({
     queryKey: ["equipos", "por-fecha"],
@@ -110,14 +42,11 @@ export default function EquiposPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between gap-4 flex-wrap">
-        <div>
-          <p className="eyebrow text-violet mb-1">▰▰ roster</p>
-          <h1 className="text-3xl font-display font-bold tracking-wide flex items-center gap-3">
-            <Users className="w-7 h-7 text-violet" /> Equipos
-          </h1>
-        </div>
-        {esCapitan && <CrearEquipoDialog />}
+      <div>
+        <p className="eyebrow text-violet mb-1">▰▰ roster</p>
+        <h1 className="text-3xl font-display font-bold tracking-wide flex items-center gap-3">
+          <Users className="w-7 h-7 text-violet" /> Equipos
+        </h1>
       </div>
 
       {/* Buscar por tag (Q5) */}
@@ -180,7 +109,10 @@ export default function EquiposPage() {
                     </p>
                   </div>
                 </div>
-                <span className="eyebrow shrink-0">{formatDate(equipo.fechaCreacion)}</span>
+                <div className="flex items-center gap-2 shrink-0">
+                  <span className="eyebrow">{formatDate(equipo.fechaCreacion)}</span>
+                  <ChevronRight className="w-4 h-4 text-muted-foreground" />
+                </div>
               </Link>
             ))}
           </div>

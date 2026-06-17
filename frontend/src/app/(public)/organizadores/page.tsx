@@ -1,60 +1,14 @@
 "use client";
 
 import { useState } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { z } from "zod";
-import { Building2, Plus, ChevronDown, ChevronRight } from "lucide-react";
-import { toast } from "sonner";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { useQuery } from "@tanstack/react-query";
+import { Building2, ChevronDown, ChevronRight } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { EmptyState } from "@/components/empty-state";
 import { ErrorState } from "@/components/error-state";
 import { HudPanel, HudEyebrow } from "@/components/hud-panel";
-import { getOrganizadores, getTorneosPorOrganizador, crearOrganizador } from "@/lib/api/torneos";
-import { useAuth } from "@/lib/auth/context";
-import { isOrganizador } from "@/lib/auth/types";
+import { getOrganizadores, getTorneosPorOrganizador } from "@/lib/api/torneos";
 import { formatDate } from "@/lib/utils";
-import type { ApiError } from "@/lib/api/fetcher";
-
-const orgSchema = z.object({ nombre: z.string().min(1, "Requerido") });
-type OrgForm = z.infer<typeof orgSchema>;
-
-function CrearOrganizadorDialog({ onSuccess }: { onSuccess: () => void }) {
-  const [open, setOpen] = useState(false);
-  const { register, handleSubmit, formState: { errors }, reset } = useForm<OrgForm>({
-    resolver: zodResolver(orgSchema),
-  });
-  const mutation = useMutation({
-    mutationFn: crearOrganizador,
-    onSuccess: () => { toast.success("Organizador creado"); setOpen(false); reset(); onSuccess(); },
-    onError: (e: ApiError) => toast.error(e.detail),
-  });
-  return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        <Button size="sm"><Plus className="h-4 w-4 mr-1" />Crear organizador</Button>
-      </DialogTrigger>
-      <DialogContent>
-        <DialogHeader><DialogTitle>Nuevo organizador</DialogTitle></DialogHeader>
-        <form onSubmit={handleSubmit((d) => mutation.mutate(d))} className="space-y-4 mt-2">
-          <div className="space-y-1">
-            <Label>Nombre del organizador</Label>
-            <Input {...register("nombre")} placeholder="ESL Gaming" />
-            {errors.nombre && <p className="text-xs text-destructive">{errors.nombre.message}</p>}
-          </div>
-          <Button type="submit" className="w-full" disabled={mutation.isPending}>
-            {mutation.isPending ? "Creando…" : "Crear organizador"}
-          </Button>
-        </form>
-      </DialogContent>
-    </Dialog>
-  );
-}
 
 function TorneosOrganizador({ organizadorId, nombre }: { organizadorId: string; nombre: string }) {
   const [exp, setExp] = useState(false);
@@ -90,10 +44,6 @@ function TorneosOrganizador({ organizadorId, nombre }: { organizadorId: string; 
 }
 
 export default function OrganizadoresPage() {
-  const { identidad } = useAuth();
-  const esOrg = isOrganizador(identidad);
-  const qc = useQueryClient();
-
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: ["organizadores"],
     queryFn: getOrganizadores,
@@ -101,14 +51,11 @@ export default function OrganizadoresPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between gap-4 flex-wrap">
-        <div>
-          <p className="eyebrow text-violet mb-1">▰▰ organizadores</p>
-          <h1 className="text-3xl font-display font-bold tracking-wide flex items-center gap-3">
-            <Building2 className="w-7 h-7 text-violet" /> Organizadores
-          </h1>
-        </div>
-        {esOrg && <CrearOrganizadorDialog onSuccess={() => qc.invalidateQueries({ queryKey: ["organizadores"] })} />}
+      <div>
+        <p className="eyebrow text-violet mb-1">▰▰ organizadores</p>
+        <h1 className="text-3xl font-display font-bold tracking-wide flex items-center gap-3">
+          <Building2 className="w-7 h-7 text-violet" /> Organizadores
+        </h1>
       </div>
 
       <HudPanel>

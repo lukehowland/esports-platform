@@ -2,14 +2,14 @@
 
 import { useState } from "react";
 import { useParams } from "next/navigation";
+import Link from "next/link";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { Trophy, Plus, RefreshCw } from "lucide-react";
+import { Trophy, Plus, RefreshCw, ArrowLeft, Lock } from "lucide-react";
 import { toast } from "sonner";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -20,24 +20,194 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { EmptyState } from "@/components/empty-state";
 import { ErrorState } from "@/components/error-state";
-import { ResultadoBadge } from "@/components/resultado-badge";
+import { HudPanel, HudEyebrow } from "@/components/hud-panel";
+import { RequireRole } from "@/lib/auth/require-role";
+import { useAuth } from "@/lib/auth/context";
+import { isAdmin, isOrganizador } from "@/lib/auth/types";
 import {
   getTorneoPorId, getEquiposPorTorneo, getPremiosPorTorneo,
-  inscribirEquipo, asignarPremio, getOrganizadores
+  inscribirEquipo, asignarPremio,
 } from "@/lib/api/torneos";
 import { getEquiposPorFecha } from "@/lib/api/equipos";
 import { getPartidasPorTorneo, registrarPartida } from "@/lib/api/partidas";
-import { useAuth } from "@/lib/auth/context";
-import { isOrganizador, isCapitan } from "@/lib/auth/types";
-import { formatDate, formatDateTime, formatCurrency } from "@/lib/utils";
+import { formatDateTime, formatCurrency } from "@/lib/utils";
 import type { ApiError } from "@/lib/api/fetcher";
 
-// Inscribir equipo
+export default function PanelTorneoPage() {
+  return (
+    <RequireRole roles={["admin", "organizador"]}>
+      <TorneoGestion />
+    </RequireRole>
+  );
+}
+
+function TorneoGestion() {
+  const { id } = useParams<{ id: string }>();
+  const { identidad } = useAuth();
+
+  const { data: torneo, isLoading, error } = useQuery({
+    queryKey: ["torneo", id],
+    queryFn: () => getTorneoPorId(id),
+  });
+
+  if (isLoading) return <Skeleton className="h-64 w-full" />;
+  if (error || !torneo) return <ErrorState error={error} />;
+
+  // Ownership: el admin gestiona cualquier torneo; el organizador, solo los suyos.
+  const esDueño =
+    isAdmin(identidad) ||
+    (isOrganizador(identidad) && identidad.organizadorId === torneo.organizadorId);
+
+  return (
+    <div className="space-y-6">
+      <Link href={isAdmin(identidad) ? "/panel/torneos" : "/panel/mis-torneos"} className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors">
+        <ArrowLeft className="w-3.5 h-3.5" /> Volver a torneos
+      </Link>
+
+      <div>
+        <div className="flex items-center gap-2 mb-1">
+          <Trophy className="h-6 w-6 text-warning" />
+          <h1 className="text-2xl font-bold text-foreground">{torneo.nombre}</h1>
+          <Badge variant="secondary" className="font-mono">{torneo.codigo}</Badge>
+        </div>
+        <p className="text-sm text-muted-foreground">
+          {torneo.nombreVideojuego} · {torneo.nombreOrganizador}
+        </p>
+      </div>
+
+      {esDueño ? (
+        <GestionContent torneoId={id} torneoNombre={torneo.nombre} esAdmin={isAdmin(identidad)} />
+      ) : (
+        <HudPanel className="p-6 flex items-start gap-3">
+          <Lock className="w-5 h-5 text-muted-foreground shrink-0 mt-0.5" />
+          <div>
+            <p className="font-semibold text-foreground">Este torneo no es tuyo</p>
+            <p className="text-sm text-muted-foreground mt-1">
+              Solo el organizador dueño del torneo (o un administrador) puede gestionar premios y partidas.
+              Podés ver el detalle público en{" "}
+              <Link href={`/torneos/${id}`} className="text-primary underline">la página del torneo</Link>.
+            </p>
+          </div>
+        </HudPanel>
+      )}
+    </div>
+  );
+}
+
+function GestionContent({ torneoId, torneoNombre, esAdmin }: { torneoId: string; torneoNombre: string; esAdmin: boolean }) {
+  const { data: equipos } = useQuery({
+    queryKey: ["torneo", torneoId, "equipos"],
+    queryFn: () => getEquiposPorTorneo(torneoId),
+  });
+
+  const { data: partidas, refetch: refetchPartidas } = useQuery({
+    queryKey: ["partidas", torneoId],
+    queryFn: () => getPartidasPorTorneo(torneoId),
+  });
+
+  const { data: premios } = useQuery({
+    queryKey: ["torneo", torneoId, "premios"],
+    queryFn: () => getPremiosPorTorneo(torneoId),
+  });
+
+  return (
+    <>
+      <div className="flex gap-2 flex-wrap">
+        {esAdmin && <InscribirEquipoDialog torneoId={torneoId} />}
+        <AsignarPremioDialog torneoId={torneoId} />
+        <RegistrarPartidaDialog torneoId={torneoId} torneoNombre={torneoNombre} />
+      </div>
+
+      <Tabs defaultValue="equipos">
+        <TabsList>
+          <TabsTrigger value="equipos">Inscritos ({equipos?.length ?? "…"})</TabsTrigger>
+          <TabsTrigger value="partidas">Partidas ({partidas?.length ?? "…"})</TabsTrigger>
+          <TabsTrigger value="premios">Premios ({premios?.length ?? "…"})</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="equipos">
+          {equipos?.length === 0 ? <EmptyState title="Sin equipos inscritos" description="Aún no hay equipos inscriptos en este torneo." /> : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Equipo</TableHead>
+                  <TableHead>Fecha inscripción</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {equipos?.map((e) => (
+                  <TableRow key={e.equipoId}>
+                    <TableCell className="font-medium">{e.nombreEquipo}</TableCell>
+                    <TableCell className="text-muted-foreground">{formatDateTime(e.fechaInscripcion)}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </TabsContent>
+
+        <TabsContent value="partidas">
+          <div className="flex justify-end mb-2">
+            <Button variant="ghost" size="sm" onClick={() => refetchPartidas()}>
+              <RefreshCw className="h-3.5 w-3.5 mr-1" /> Actualizar
+            </Button>
+          </div>
+          {partidas?.length === 0 ? <EmptyState title="Sin partidas" description="Aún no se han registrado partidas en este torneo." /> : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Local</TableHead>
+                  <TableHead>Visitante</TableHead>
+                  <TableHead>Resultado</TableHead>
+                  <TableHead>Fecha</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {partidas?.map((p) => (
+                  <TableRow key={p.partidaId}>
+                    <TableCell className="font-medium">{p.nombreLocal}</TableCell>
+                    <TableCell className="text-muted-foreground">{p.nombreVisitante}</TableCell>
+                    <TableCell><Badge variant="secondary">{p.resultado}</Badge></TableCell>
+                    <TableCell className="text-muted-foreground">{formatDateTime(p.fecha)}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </TabsContent>
+
+        <TabsContent value="premios">
+          {premios?.length === 0 ? <EmptyState title="Sin premios" description="Aún no se han asignado premios en este torneo." /> : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Tipo</TableHead>
+                  <TableHead>Monto</TableHead>
+                  <TableHead>Equipo ganador</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {premios?.map((p) => (
+                  <TableRow key={p.premioId}>
+                    <TableCell><Badge variant="secondary">{p.tipo}</Badge></TableCell>
+                    <TableCell className="text-gold font-semibold">{formatCurrency(p.monto)}</TableCell>
+                    <TableCell className="text-muted-foreground">{p.nombreEquipo ?? "—"}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </TabsContent>
+      </Tabs>
+    </>
+  );
+}
+
+// Inscribir equipo — solo admin (superusuario). El organizador no inscribe: lo hace el capitán.
 function InscribirEquipoDialog({ torneoId }: { torneoId: string }) {
   const [open, setOpen] = useState(false);
   const [equipoId, setEquipoId] = useState("");
   const qc = useQueryClient();
-  const { identidad } = useAuth();
   const { data: equipos } = useQuery({ queryKey: ["equipos", "por-fecha"], queryFn: getEquiposPorFecha });
 
   const mutation = useMutation({
@@ -51,8 +221,6 @@ function InscribirEquipoDialog({ torneoId }: { torneoId: string }) {
     onError: (e: ApiError) => toast.error(e.detail),
   });
 
-  const miEquipoId = isCapitan(identidad) ? identidad.equipoId : "";
-
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
@@ -63,7 +231,7 @@ function InscribirEquipoDialog({ torneoId }: { torneoId: string }) {
         <div className="space-y-4 mt-2">
           <div className="space-y-1">
             <Label>Equipo</Label>
-            <Select value={equipoId} onValueChange={setEquipoId} defaultValue={miEquipoId}>
+            <Select value={equipoId} onValueChange={setEquipoId}>
               <SelectTrigger><SelectValue placeholder="Seleccionar equipo…" /></SelectTrigger>
               <SelectContent>
                 {equipos?.map((e) => (
@@ -81,7 +249,6 @@ function InscribirEquipoDialog({ torneoId }: { torneoId: string }) {
   );
 }
 
-// Asignar premio
 const premioSchema = z.object({
   monto: z.coerce.number().positive("Debe ser positivo"),
   tipo: z.string().min(1, "Requerido"),
@@ -153,7 +320,6 @@ function AsignarPremioDialog({ torneoId }: { torneoId: string }) {
   );
 }
 
-// Registrar partida
 const partidaSchema = z.object({
   equipoLocalId: z.string().min(1, "Requerido"),
   equipoVisitanteId: z.string().min(1, "Requerido"),
@@ -255,149 +421,5 @@ function RegistrarPartidaDialog({ torneoId, torneoNombre }: { torneoId: string; 
         </form>
       </DialogContent>
     </Dialog>
-  );
-}
-
-export default function TorneoDetallePage() {
-  const { id } = useParams<{ id: string }>();
-  const { identidad } = useAuth();
-  const esOrg = isOrganizador(identidad);
-  const esCapitan = isCapitan(identidad);
-
-  const { data: torneo, isLoading, error } = useQuery({
-    queryKey: ["torneo", id],
-    queryFn: () => getTorneoPorId(id),
-  });
-
-  const { data: equipos } = useQuery({
-    queryKey: ["torneo", id, "equipos"],
-    queryFn: () => getEquiposPorTorneo(id),
-  });
-
-  const { data: partidas, refetch: refetchPartidas } = useQuery({
-    queryKey: ["partidas", id],
-    queryFn: () => getPartidasPorTorneo(id),
-  });
-
-  const { data: premios } = useQuery({
-    queryKey: ["torneo", id, "premios"],
-    queryFn: () => getPremiosPorTorneo(id),
-  });
-
-  if (isLoading) return <Skeleton className="h-64 w-full" />;
-  if (error || !torneo) return <ErrorState error={error} />;
-
-  return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div>
-        <div className="flex items-start justify-between gap-4 flex-wrap">
-          <div>
-            <div className="flex items-center gap-2 mb-1">
-              <Trophy className="h-6 w-6 text-warning" />
-              <h1 className="text-2xl font-bold text-foreground">{torneo.nombre}</h1>
-              <Badge variant="secondary" className="font-mono">{torneo.codigo}</Badge>
-            </div>
-            <p className="text-sm text-muted-foreground">
-              {torneo.nombreVideojuego} · {torneo.nombreOrganizador} · {formatDate(torneo.fechaInicio)}
-            </p>
-          </div>
-          <div className="flex gap-2 flex-wrap">
-            {esCapitan && <InscribirEquipoDialog torneoId={id} />}
-            {esOrg && (
-              <>
-                <AsignarPremioDialog torneoId={id} />
-                <RegistrarPartidaDialog torneoId={id} torneoNombre={torneo.nombre} />
-              </>
-            )}
-          </div>
-        </div>
-      </div>
-
-      <Tabs defaultValue="equipos">
-        <TabsList>
-          <TabsTrigger value="equipos">Equipos ({equipos?.length ?? "…"})</TabsTrigger>
-          <TabsTrigger value="partidas">Partidas ({partidas?.length ?? "…"})</TabsTrigger>
-          <TabsTrigger value="premios">Premios ({premios?.length ?? "…"})</TabsTrigger>
-        </TabsList>
-
-        {/* Q13 */}
-        <TabsContent value="equipos">
-          {equipos?.length === 0 ? <EmptyState title="Sin equipos inscritos" description="Aún no hay equipos inscriptos en este torneo." /> : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Equipo</TableHead>
-                  <TableHead>Fecha inscripción</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {equipos?.map((e) => (
-                  <TableRow key={e.equipoId}>
-                    <TableCell className="font-medium">{e.nombreEquipo}</TableCell>
-                    <TableCell className="text-muted-foreground">{formatDateTime(e.fechaInscripcion)}</TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          )}
-        </TabsContent>
-
-        {/* Q16 */}
-        <TabsContent value="partidas">
-          <div className="flex justify-end mb-2">
-            <Button variant="ghost" size="sm" onClick={() => refetchPartidas()}>
-              <RefreshCw className="h-3.5 w-3.5 mr-1" /> Actualizar
-            </Button>
-          </div>
-          {partidas?.length === 0 ? <EmptyState title="Sin partidas" description="Aún no se han registrado partidas en este torneo." /> : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Local</TableHead>
-                  <TableHead>Visitante</TableHead>
-                  <TableHead>Resultado</TableHead>
-                  <TableHead>Fecha</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {partidas?.map((p) => (
-                  <TableRow key={p.partidaId}>
-                    <TableCell className="font-medium">{p.nombreLocal}</TableCell>
-                    <TableCell className="text-muted-foreground">{p.nombreVisitante}</TableCell>
-                    <TableCell><Badge variant="secondary">{p.resultado}</Badge></TableCell>
-                    <TableCell className="text-muted-foreground">{formatDateTime(p.fecha)}</TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          )}
-        </TabsContent>
-
-        {/* Q20 */}
-        <TabsContent value="premios">
-          {premios?.length === 0 ? <EmptyState title="Sin premios" description="Aún no se han asignado premios en este torneo." /> : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Tipo</TableHead>
-                  <TableHead>Monto</TableHead>
-                  <TableHead>Equipo ganador</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {premios?.map((p) => (
-                  <TableRow key={p.premioId}>
-                    <TableCell><Badge variant="secondary">{p.tipo}</Badge></TableCell>
-                    <TableCell className="text-gold font-semibold">{formatCurrency(p.monto)}</TableCell>
-                    <TableCell className="text-muted-foreground">{p.nombreEquipo ?? "—"}</TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          )}
-        </TabsContent>
-      </Tabs>
-    </div>
   );
 }

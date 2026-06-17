@@ -8,6 +8,7 @@ import {
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/lib/auth/context";
 import { RequireRole } from "@/lib/auth/require-role";
+import { WorkspaceTopbar } from "@/components/layout/workspace-topbar";
 import { getPanelNav } from "@/lib/auth/panel-nav";
 import type { Rol } from "@/lib/auth/types";
 
@@ -24,10 +25,12 @@ export default function PanelLayout({ children }: { children: React.ReactNode })
 
   const rolLabel = rol === "admin" ? "Administrador" : "Organizador";
   const nombre = identidad && "nombre" in identidad ? identidad.nombre : "";
+  const section = rol === "admin" ? "Administración" : "Panel de organizador";
 
   return (
     <RequireRole roles={["admin", "organizador"]}>
-      <div className="flex gap-6 min-h-[calc(100vh-4rem-3rem)]">
+      <WorkspaceTopbar section={section} />
+      <div className="container mx-auto max-w-7xl px-4 py-6 flex gap-6 min-h-[calc(100vh-3.5rem)]">
 
         {/* Sidebar */}
         <aside className="w-52 shrink-0 space-y-1 pt-1">

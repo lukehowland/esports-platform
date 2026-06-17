@@ -2,104 +2,25 @@
 
 import { useState } from "react";
 import { useParams } from "next/navigation";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { z } from "zod";
-import { Plus, RefreshCw, Loader2 } from "lucide-react";
-import { toast } from "sonner";
+import { useQuery } from "@tanstack/react-query";
+import { RefreshCw } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { EmptyState } from "@/components/empty-state";
 import { ErrorState } from "@/components/error-state";
 import { ResultadoBadge } from "@/components/resultado-badge";
-import { getEquipoPorId, getIntegrantesPorEquipo, getJugadoresPorEquipo, agregarJugador } from "@/lib/api/equipos";
+import { getEquipoPorId, getIntegrantesPorEquipo, getJugadoresPorEquipo } from "@/lib/api/equipos";
 import { getTorneosPorEquipo, getPremiosPorEquipo } from "@/lib/api/torneos";
 import { getPartidasPorEquipo } from "@/lib/api/partidas";
 import { getStatsEquipoTorneo } from "@/lib/api/ranking";
-import { useAuth } from "@/lib/auth/context";
-import { isCapitan } from "@/lib/auth/types";
 import { formatDate, formatDateTime, formatCurrency } from "@/lib/utils";
-import type { ApiError } from "@/lib/api/fetcher";
-
-const jugadorSchema = z.object({
-  nickname: z.string().min(1, "Requerido"),
-  nombre: z.string().min(1, "Requerido"),
-  pais: z.string().min(1, "Requerido"),
-  rol: z.string().min(1, "Requerido"),
-});
-type JugadorForm = z.infer<typeof jugadorSchema>;
-
-const ROLES_JUEGO = ["Top", "Jungle", "Mid", "ADC", "Support", "Rifler", "AWPer", "IGL", "Support CS", "Entry Fragger"];
-
-function AgregarJugadorDialog({ equipoId }: { equipoId: string }) {
-  const [open, setOpen] = useState(false);
-  const qc = useQueryClient();
-  const { register, handleSubmit, setValue, formState: { errors }, reset } = useForm<JugadorForm>({
-    resolver: zodResolver(jugadorSchema),
-  });
-
-  const mutation = useMutation({
-    mutationFn: (data: JugadorForm) => agregarJugador(equipoId, data),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["equipo", equipoId, "integrantes"] });
-      qc.invalidateQueries({ queryKey: ["equipo", equipoId, "jugadores"] });
-      toast.success("Jugador agregado");
-      setOpen(false);
-      reset();
-    },
-    onError: (e: ApiError) => toast.error(e.detail),
-  });
-
-  return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        <Button size="sm"><Plus className="h-4 w-4 mr-1" />Agregar jugador</Button>
-      </DialogTrigger>
-      <DialogContent>
-        <DialogHeader><DialogTitle>Agregar jugador al equipo</DialogTitle></DialogHeader>
-        <form onSubmit={handleSubmit((d) => mutation.mutate(d))} className="space-y-4 mt-2">
-          <div className="space-y-1">
-            <Label>Nickname</Label>
-            <Input {...register("nickname")} placeholder="ElTigre" />
-            {errors.nickname && <p className="text-xs text-destructive">{errors.nickname.message}</p>}
-          </div>
-          <div className="space-y-1">
-            <Label>Nombre completo</Label>
-            <Input {...register("nombre")} placeholder="Juan Pérez" />
-            {errors.nombre && <p className="text-xs text-destructive">{errors.nombre.message}</p>}
-          </div>
-          <div className="space-y-1">
-            <Label>País</Label>
-            <Input {...register("pais")} placeholder="Bolivia" />
-            {errors.pais && <p className="text-xs text-destructive">{errors.pais.message}</p>}
-          </div>
-          <div className="space-y-1">
-            <Label>Rol</Label>
-            <Select onValueChange={(v) => setValue("rol", v)}>
-              <SelectTrigger><SelectValue placeholder="Seleccionar rol…" /></SelectTrigger>
-              <SelectContent>
-                {ROLES_JUEGO.map((r) => <SelectItem key={r} value={r}>{r}</SelectItem>)}
-              </SelectContent>
-            </Select>
-            {errors.rol && <p className="text-xs text-destructive">{errors.rol.message}</p>}
-          </div>
-          <Button type="submit" className="w-full" disabled={mutation.isPending}>
-            {mutation.isPending ? "Agregando…" : "Agregar jugador"}
-          </Button>
-        </form>
-      </DialogContent>
-    </Dialog>
-  );
-}
 
 function StatsTab({ equipoId }: { equipoId: string }) {
   const [torneoIdInput, setTorneoIdInput] = useState("");
@@ -173,9 +94,6 @@ function StatsTab({ equipoId }: { equipoId: string }) {
 
 export default function EquipoDetallePage() {
   const { id } = useParams<{ id: string }>();
-  const { identidad } = useAuth();
-  const esCapitan = isCapitan(identidad);
-  const esMiEquipo = esCapitan && identidad?.equipoId === id;
 
   const [paisFiltro, setPaisFiltro] = useState("");
   const [paisAplicado, setPaisAplicado] = useState("");
@@ -217,15 +135,12 @@ export default function EquipoDetallePage() {
   return (
     <div className="space-y-6">
       {/* Header del equipo */}
-      <div className="flex items-start justify-between gap-4 flex-wrap">
-        <div>
-          <div className="flex items-center gap-3 mb-1">
-            <Badge variant="secondary" className="font-mono text-primary text-sm px-3 py-1">{equipo.tag}</Badge>
-            <h1 className="text-2xl font-bold text-foreground">{equipo.nombre}</h1>
-          </div>
-          <p className="text-sm text-muted-foreground">{equipo.pais} · Creado {formatDate(equipo.fechaCreacion)}</p>
+      <div>
+        <div className="flex items-center gap-3 mb-1">
+          <Badge variant="secondary" className="font-mono text-primary text-sm px-3 py-1">{equipo.tag}</Badge>
+          <h1 className="text-2xl font-bold text-foreground">{equipo.nombre}</h1>
         </div>
-        {esMiEquipo && <AgregarJugadorDialog equipoId={id} />}
+        <p className="text-sm text-muted-foreground">{equipo.pais} · Creado {formatDate(equipo.fechaCreacion)}</p>
       </div>
 
       {/* Tabs */}

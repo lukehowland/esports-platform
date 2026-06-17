@@ -97,18 +97,11 @@ export function Navbar() {
               <>
                 <RolBadge identidad={identidad} />
                 {dashLink && (
-                  <Link
-                    href={dashLink}
-                    className={cn(
-                      "hidden sm:flex items-center gap-1 rounded px-2 py-1.5 text-xs font-semibold transition-colors",
-                      pathname.startsWith(dashLink)
-                        ? "text-violet"
-                        : "text-muted-foreground hover:text-foreground"
-                    )}
-                    title="Mi panel"
-                  >
-                    <LayoutDashboard className="w-3.5 h-3.5" />
-                  </Link>
+                  <Button variant="outline" size="sm" asChild className="hidden sm:inline-flex">
+                    <Link href={dashLink}>
+                      <LayoutDashboard className="w-3.5 h-3.5 mr-1" /> Ir a mi área
+                    </Link>
+                  </Button>
                 )}
                 <Button variant="ghost" size="icon" onClick={logout} title="Cerrar sesión" className="hud-clip-sm">
                   <LogOut className="h-4 w-4" />

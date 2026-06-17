@@ -8,7 +8,6 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Users, UserPlus, Trophy, BarChart3, Loader2, Flag } from "lucide-react";
 import { useAuth } from "@/lib/auth/context";
 import { isCapitan } from "@/lib/auth/types";
-import { RequireRole } from "@/lib/auth/require-role";
 import { getEquipoPorId, getIntegrantesPorEquipo, agregarJugador, type AgregarJugadorDto } from "@/lib/api/equipos";
 import { getTorneosPorEquipo } from "@/lib/api/torneos";
 import { getStatsEquipoTorneo, getRankingEquipos } from "@/lib/api/ranking";
@@ -30,14 +29,6 @@ const jugadorSchema = z.object({
 type JugadorForm = z.infer<typeof jugadorSchema>;
 
 export default function MiEquipoPage() {
-  return (
-    <RequireRole roles={["capitan"]}>
-      <MiEquipoContent />
-    </RequireRole>
-  );
-}
-
-function MiEquipoContent() {
   const { identidad } = useAuth();
   const qc = useQueryClient();
   const capitan = isCapitan(identidad) ? identidad : null;

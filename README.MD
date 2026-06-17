@@ -93,7 +93,7 @@ GET  /api/stats/equipo/{equipoId}/torneo/{torneoId}  Q24
 
 ## Tests de integración
 
-El proyecto incluye 122 tests de integración que verifican Q1–Q24, casos de error y autorización por rol/ownership a través del gateway.
+El proyecto incluye 140 tests de integración que verifican Q1–Q24, casos de error y autorización por rol/ownership a través del gateway.
 
 **Prerequisitos:** el stack debe estar levantado. El seeder corre automaticamente antes del frontend y antes de los tests.
 

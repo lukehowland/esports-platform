@@ -60,13 +60,13 @@ Cuando un servicio necesita un dato de otro **al procesar un request**, lo pide 
 
 Ejemplo concreto: al inscribir un equipo, `tournaments` necesita el `nombre_equipo` (para `equipos_por_torneo`) y la lista de `jugador_id` del roster (para armar el evento que alimenta Q23). Hace `GET http://teams:8080/api/equipos/{id}` y `GET http://teams:8080/api/equipos/{id}/integrantes`.
 
-Otro ejemplo: al registrar una partida como organizador, `matches` necesita saber quién es dueño del torneo. Hace `GET http://tournaments:8080/api/torneos/{id}` con `HttpClient` tipado y compara el `organizadorId` con el claim `organizador_id`.
+Otro ejemplo: al registrar una partida como organizador, `matches` necesita saber quién es dueño del torneo y qué equipos están inscritos. Hace `GET http://tournaments:8080/api/torneos/{id}` y `GET http://tournaments:8080/api/torneos/{id}/equipos` con `HttpClient` tipado; compara el `organizadorId` con el claim `organizador_id` y rechaza partidas entre equipos no inscritos.
 
 ### Autenticación y autorización
 El gateway no centraliza reglas de permisos; solo reenvía el header `Authorization`. El servicio `auth` emite tokens, y `teams`, `tournaments` y `matches` validan esos tokens en sus mutaciones:
 
 - `admin`: puede todo; lo usa el seeder y la suite de integración.
-- `organizador`: puede crear videojuegos y operar únicamente torneos de su `organizador_id`.
+- `organizador`: puede operar únicamente torneos de su `organizador_id`. No administra videojuegos, porque son catálogo global.
 - `capitan`: puede agregar jugadores/inscribir únicamente su `equipo_id`.
 - `fan` o anónimo: solo lectura.
 

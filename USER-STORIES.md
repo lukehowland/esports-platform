@@ -8,7 +8,7 @@ Un sistema para **gestionar torneos de eSports**: organizadores crean torneos de
 
 ## Actores
 
-- **Organizador** — crea torneos, videojuegos, define premios.
+- **Organizador** — crea torneos y define premios/partidas de sus torneos.
 - **Capitán / Equipo** — registra su equipo y jugadores; inscribe el equipo en torneos.
 - **Jugador** — pertenece a un equipo; tiene nick, país, rol.
 - **Fan / Visitante** — consulta equipos, torneos, partidas, rankings, premios.
@@ -56,7 +56,7 @@ Como **fan** o **organizador**, quiero ver todos los integrantes de un equipo, p
 ## Épica 2 — Catálogos, torneos, inscripciones y premios (servicio tournaments)
 
 **HU-09 — Registrar un videojuego**
-Como **organizador**, quiero registrar un videojuego con su género, para poder crear torneos de ese juego.
+Como **admin**, quiero registrar un videojuego con su género, para mantener limpio el catálogo global disponible para torneos.
 - *Endpoint:* `POST /api/videojuegos`.
 
 **HU-10 — Ver videojuegos por género**

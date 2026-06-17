@@ -1,83 +1,16 @@
 "use client";
 
 import { useState } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { z } from "zod";
-import { Gamepad2, Plus, ChevronDown, ChevronRight } from "lucide-react";
-import { toast } from "sonner";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { useQuery } from "@tanstack/react-query";
+import { Gamepad2, ChevronDown, ChevronRight } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { EmptyState } from "@/components/empty-state";
 import { ErrorState } from "@/components/error-state";
 import { HudPanel, HudEyebrow } from "@/components/hud-panel";
-import { getVideojuegosPorGenero, getTorneosPorVideojuego, crearVideojuego } from "@/lib/api/torneos";
-import { useAuth } from "@/lib/auth/context";
-import { isOrganizador } from "@/lib/auth/types";
+import { getVideojuegosPorGenero, getTorneosPorVideojuego } from "@/lib/api/torneos";
 import { formatDate } from "@/lib/utils";
-import type { ApiError } from "@/lib/api/fetcher";
 
 const GENEROS = ["MOBA", "FPS", "BATTLE_ROYALE", "RTS", "FIGHTING", "SPORTS", "RPG"];
-
-const vgSchema = z.object({
-  nombre: z.string().min(1, "Requerido"),
-  genero: z.string().min(1, "Requerido"),
-});
-type VgForm = z.infer<typeof vgSchema>;
-
-function CrearVideojuegoDialog({ onSuccess }: { onSuccess: () => void }) {
-  const [open, setOpen] = useState(false);
-  const { register, handleSubmit, setValue, formState: { errors }, reset } = useForm<VgForm>({
-    resolver: zodResolver(vgSchema),
-  });
-
-  const mutation = useMutation({
-    mutationFn: crearVideojuego,
-    onSuccess: () => {
-      toast.success("Videojuego creado");
-      setOpen(false);
-      reset();
-      onSuccess();
-    },
-    onError: (e: ApiError) => toast.error(e.detail),
-  });
-
-  return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        <Button size="sm"><Plus className="h-4 w-4 mr-1" />Crear videojuego</Button>
-      </DialogTrigger>
-      <DialogContent>
-        <DialogHeader><DialogTitle>Nuevo videojuego</DialogTitle></DialogHeader>
-        <form onSubmit={handleSubmit((d) => mutation.mutate(d))} className="space-y-4 mt-2">
-          <div className="space-y-1">
-            <Label>Nombre</Label>
-            <Input {...register("nombre")} placeholder="League of Legends" />
-            {errors.nombre && <p className="text-xs text-destructive">{errors.nombre.message}</p>}
-          </div>
-          <div className="space-y-1">
-            <Label>Género</Label>
-            <Select onValueChange={(v) => setValue("genero", v)}>
-              <SelectTrigger><SelectValue placeholder="Seleccionar género…" /></SelectTrigger>
-              <SelectContent>
-                {GENEROS.map((g) => <SelectItem key={g} value={g}>{g}</SelectItem>)}
-              </SelectContent>
-            </Select>
-            {errors.genero && <p className="text-xs text-destructive">{errors.genero.message}</p>}
-          </div>
-          <Button type="submit" className="w-full" disabled={mutation.isPending}>
-            {mutation.isPending ? "Creando…" : "Crear videojuego"}
-          </Button>
-        </form>
-      </DialogContent>
-    </Dialog>
-  );
-}
 
 function TorneosPorVideojuego({ videojuegoId, nombre }: { videojuegoId: string; nombre: string }) {
   const [expanded, setExpanded] = useState(false);
@@ -119,9 +52,6 @@ function TorneosPorVideojuego({ videojuegoId, nombre }: { videojuegoId: string; 
 
 export default function VideojuegosPage() {
   const [generoSeleccionado, setGeneroSeleccionado] = useState("MOBA");
-  const { identidad } = useAuth();
-  const esOrganizador = isOrganizador(identidad);
-  const qc = useQueryClient();
 
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: ["videojuegos", generoSeleccionado],
@@ -130,16 +60,11 @@ export default function VideojuegosPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between gap-4 flex-wrap">
-        <div>
-          <p className="eyebrow text-violet mb-1">▰▰ catálogo</p>
-          <h1 className="text-3xl font-display font-bold tracking-wide flex items-center gap-3">
-            <Gamepad2 className="w-7 h-7 text-violet" /> Videojuegos
-          </h1>
-        </div>
-        {esOrganizador && (
-          <CrearVideojuegoDialog onSuccess={() => qc.invalidateQueries({ queryKey: ["videojuegos", generoSeleccionado] })} />
-        )}
+      <div>
+        <p className="eyebrow text-violet mb-1">▰▰ catálogo</p>
+        <h1 className="text-3xl font-display font-bold tracking-wide flex items-center gap-3">
+          <Gamepad2 className="w-7 h-7 text-violet" /> Videojuegos
+        </h1>
       </div>
 
       {/* Selector de género */}

@@ -178,7 +178,7 @@ public class AuthTests(GatewayFixture fix)
     }
 
     [Fact]
-    public async Task OrganizadorPuedeCrearVideojuego_Devuelve201()
+    public async Task OrganizadorNoPuedeCrearVideojuego_Devuelve403()
     {
         var riotToken = await fix.LoginAsync("org_riot", "OrgDemo2024");
 
@@ -188,7 +188,7 @@ public class AuthTests(GatewayFixture fix)
             genero = "AUTH"
         }, riotToken);
 
-        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
     }
 
     [Fact]
@@ -224,16 +224,16 @@ public class AuthTests(GatewayFixture fix)
     [Fact]
     public async Task OrganizadorPuedeCrearTorneoPropio_Devuelve201()
     {
-        var riotToken = await fix.LoginAsync("org_riot", "OrgDemo2024");
+        var organizer = await CreateTestOrganizerAsync();
 
-        var response = await fix.AuthedPost("/api/torneos", new
+        using var response = await fix.AuthedPost("/api/torneos", new
         {
-            nombre = "Riot Auth Smoke Tournament",
-            codigo = $"AUTH-RIOT-{Guid.NewGuid():N}"[..18].ToUpperInvariant(),
+            nombre = "Auth Smoke Tournament",
+            codigo = $"AUTH-OWN-{Guid.NewGuid():N}"[..18].ToUpperInvariant(),
             videojuegoId = fix.LoLId,
-            organizadorId = fix.RIOTId,
+            organizadorId = organizer.OrganizadorId,
             fechaInicio = "2026-12-02T00:00:00Z"
-        }, riotToken);
+        }, organizer.Token);
 
         Assert.Equal(HttpStatusCode.Created, response.StatusCode);
     }
@@ -302,7 +302,7 @@ public class AuthTests(GatewayFixture fix)
     [Fact]
     public async Task CapitanPuedeInscribirSuEquipo_Devuelve201()
     {
-        var tournamentId = await CreateRiotTournamentAsync();
+        var (tournamentId, _) = await CreateOwnedTournamentAsync();
         var capToken = await fix.LoginAsync("cap_t1", "CapDemo2024");
 
         var response = await fix.AuthedPost($"/api/torneos/{tournamentId}/inscripciones", new
@@ -316,17 +316,32 @@ public class AuthTests(GatewayFixture fix)
     [Fact]
     public async Task OrganizadorPuedeAsignarPremioEnTorneoPropio_Devuelve201()
     {
-        var tournamentId = await CreateRiotTournamentAsync();
-        var riotToken = await fix.LoginAsync("org_riot", "OrgDemo2024");
+        var (tournamentId, organizerToken) = await CreateOwnedTournamentAsync();
+        await EnrollTeamAsync(tournamentId, fix.T1Id);
 
         var response = await fix.AuthedPost($"/api/torneos/{tournamentId}/premios", new
         {
             monto = 12345.67m,
             tipo = $"Auth Prize {Guid.NewGuid():N}"[..24],
             equipoId = fix.T1Id
-        }, riotToken);
+        }, organizerToken);
 
         Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task OrganizadorNoPuedeAsignarPremioAEquipoNoInscrito_Devuelve409()
+    {
+        var (tournamentId, organizerToken) = await CreateOwnedTournamentAsync();
+
+        var response = await fix.AuthedPost($"/api/torneos/{tournamentId}/premios", new
+        {
+            monto = 12345.67m,
+            tipo = $"Auth Bad Prize {Guid.NewGuid():N}"[..28],
+            equipoId = fix.T1Id
+        }, organizerToken);
+
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
     }
 
     [Fact]
@@ -347,13 +362,14 @@ public class AuthTests(GatewayFixture fix)
     [Fact]
     public async Task OrganizadorPuedeRegistrarPartidaDeTorneoPropio_Devuelve201()
     {
-        var tournamentId = await CreateRiotTournamentAsync();
-        var riotToken = await fix.LoginAsync("org_riot", "OrgDemo2024");
+        var (tournamentId, organizerToken) = await CreateOwnedTournamentAsync();
+        await EnrollTeamAsync(tournamentId, fix.T1Id);
+        await EnrollTeamAsync(tournamentId, fix.G2Id);
 
         var response = await fix.AuthedPost("/api/partidas", new
         {
             torneoId = tournamentId,
-            nombreTorneo = "Riot Auth Match Tournament",
+            nombreTorneo = "Auth Match Tournament",
             fecha = "2026-12-04T20:00:00Z",
             equipoLocalId = fix.T1Id,
             nombreLocal = "T1",
@@ -361,9 +377,30 @@ public class AuthTests(GatewayFixture fix)
             nombreVisitante = "G2 Esports",
             equipoGanadorId = fix.T1Id,
             resultado = "2-1"
-        }, riotToken);
+        }, organizerToken);
 
         Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task OrganizadorNoPuedeRegistrarPartidaSinEquiposInscritos_Devuelve409()
+    {
+        var (tournamentId, organizerToken) = await CreateOwnedTournamentAsync();
+
+        var response = await fix.AuthedPost("/api/partidas", new
+        {
+            torneoId = tournamentId,
+            nombreTorneo = "Auth Match Tournament",
+            fecha = "2026-12-04T20:00:00Z",
+            equipoLocalId = fix.T1Id,
+            nombreLocal = "T1",
+            equipoVisitanteId = fix.G2Id,
+            nombreVisitante = "G2 Esports",
+            equipoGanadorId = fix.T1Id,
+            resultado = "2-1"
+        }, organizerToken);
+
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
     }
 
     [Fact]
@@ -425,19 +462,53 @@ public class AuthTests(GatewayFixture fix)
         return await fix.LoginAsync(username, "CapDemo2024");
     }
 
-    private async Task<Guid> CreateRiotTournamentAsync()
+    private async Task<(Guid TorneoId, string OrganizadorToken)> CreateOwnedTournamentAsync()
     {
-        var riotToken = await fix.LoginAsync("org_riot", "OrgDemo2024");
+        var organizer = await CreateTestOrganizerAsync();
         using var response = await fix.AuthedPost("/api/torneos", new
         {
-            nombre = "Riot Auth Ownership Tournament",
-            codigo = $"AUTH-R{Guid.NewGuid():N}"[..18].ToUpperInvariant(),
+            nombre = "Auth Ownership Tournament",
+            codigo = $"AUTH-T{Guid.NewGuid():N}"[..18].ToUpperInvariant(),
             videojuegoId = fix.LoLId,
-            organizadorId = fix.RIOTId,
+            organizadorId = organizer.OrganizadorId,
             fechaInicio = "2026-12-03T00:00:00Z"
-        }, riotToken);
+        }, organizer.Token);
         response.EnsureSuccessStatusCode();
         var doc = GatewayFixture.ParseJson(await response.Content.ReadAsStringAsync());
-        return doc.GetProperty("torneoId").GetGuid();
+        return (doc.GetProperty("torneoId").GetGuid(), organizer.Token);
+    }
+
+    private async Task<(Guid OrganizadorId, string Token)> CreateTestOrganizerAsync()
+    {
+        var suffix = Guid.NewGuid().ToString("N")[..8].ToUpperInvariant();
+        using var organizerResponse = await fix.AdminPost("/api/organizadores", new
+        {
+            nombre = $"Auth Test Organizer {suffix}"
+        });
+        organizerResponse.EnsureSuccessStatusCode();
+        var organizerDoc = GatewayFixture.ParseJson(await organizerResponse.Content.ReadAsStringAsync());
+        var organizerId = organizerDoc.GetProperty("organizadorId").GetGuid();
+
+        var username = $"org_auth_{Guid.NewGuid():N}"[..24].ToLowerInvariant();
+        using var userResponse = await fix.AdminPost("/api/auth/register", new
+        {
+            username,
+            password = "OrgDemo2024",
+            rol = "organizador",
+            organizadorId = organizerId,
+            nombreDisplay = "Auth Test Organizer"
+        });
+        userResponse.EnsureSuccessStatusCode();
+
+        return (organizerId, await fix.LoginAsync(username, "OrgDemo2024"));
+    }
+
+    private async Task EnrollTeamAsync(Guid tournamentId, Guid teamId)
+    {
+        using var response = await fix.AdminPost($"/api/torneos/{tournamentId}/inscripciones", new
+        {
+            equipoId = teamId
+        });
+        response.EnsureSuccessStatusCode();
     }
 }

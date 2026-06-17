@@ -16,12 +16,15 @@ public class PremioService : IPremioService
 {
     private readonly IPremioRepository _repo;
     private readonly ITorneoRepository _torneoRepo;
+    private readonly IInscripcionRepository _inscripcionRepo;
     private readonly TeamsClient _teamsClient;
 
-    public PremioService(IPremioRepository repo, ITorneoRepository torneoRepo, TeamsClient teamsClient)
+    public PremioService(IPremioRepository repo, ITorneoRepository torneoRepo,
+        IInscripcionRepository inscripcionRepo, TeamsClient teamsClient)
     {
         _repo = repo;
         _torneoRepo = torneoRepo;
+        _inscripcionRepo = inscripcionRepo;
         _teamsClient = teamsClient;
     }
 
@@ -33,6 +36,10 @@ public class PremioService : IPremioService
         string? nombreEquipo = null;
         if (req.EquipoId.HasValue)
         {
+            var equiposInscritos = await _inscripcionRepo.ObtenerEquiposPorTorneoAsync(torneoId);
+            if (!equiposInscritos.Any(e => e.EquipoId == req.EquipoId.Value))
+                throw new InvalidOperationException("Solo se pueden asignar premios a equipos inscritos en el torneo.");
+
             var equipo = await _teamsClient.ObtenerEquipoAsync(req.EquipoId.Value)
                 ?? throw new KeyNotFoundException($"Equipo {req.EquipoId} no encontrado.");
             nombreEquipo = equipo.Nombre;

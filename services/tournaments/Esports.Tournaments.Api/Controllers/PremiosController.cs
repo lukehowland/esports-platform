@@ -51,6 +51,13 @@ public class PremiosController : ControllerBase
         {
             return NotFound(new { title = ex.Message });
         }
+        catch (InvalidOperationException ex)
+        {
+            return Problem(
+                title: "Equipo no inscrito en el torneo",
+                statusCode: StatusCodes.Status409Conflict,
+                detail: ex.Message);
+        }
     }
 
     [HttpGet("torneos/{torneoId:guid}/premios")]

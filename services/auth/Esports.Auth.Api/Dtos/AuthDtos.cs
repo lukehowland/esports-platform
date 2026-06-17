@@ -28,3 +28,10 @@ public record MeResponse(
     string? Nombre,
     Guid? OrganizadorId,
     Guid? EquipoId);
+
+public record UsuarioResumenResponse(
+    string Username,
+    string Rol,
+    string Nombre,
+    Guid? OrganizadorId,
+    Guid? EquipoId);

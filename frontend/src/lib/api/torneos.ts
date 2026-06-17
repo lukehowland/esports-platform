@@ -165,3 +165,27 @@ export const asignarPremio = (torneoId: string, data: AsignarPremioDto) =>
     method: "POST",
     body: JSON.stringify(data),
   });
+
+// GET videojuego por id (trae nombre + género)
+export const getVideojuegoPorId = (videojuegoId: string) =>
+  fetcher<VideojuegoResponse>(`/api/videojuegos/${videojuegoId}`);
+
+// Edición / eliminación de organizadores (admin; bloqueado si tiene torneos)
+export const editarOrganizador = (organizadorId: string, data: CrearOrganizadorDto) =>
+  fetcher<OrganizadorResponse>(`/api/organizadores/${organizadorId}`, {
+    method: "PUT",
+    body: JSON.stringify(data),
+  });
+
+export const eliminarOrganizador = (organizadorId: string) =>
+  fetcher<void>(`/api/organizadores/${organizadorId}`, { method: "DELETE" });
+
+// Edición / eliminación de videojuegos (admin u organizador; bloqueado si tiene torneos)
+export const editarVideojuego = (videojuegoId: string, data: CrearVideojuegoDto) =>
+  fetcher<VideojuegoResponse>(`/api/videojuegos/${videojuegoId}`, {
+    method: "PUT",
+    body: JSON.stringify(data),
+  });
+
+export const eliminarVideojuego = (videojuegoId: string) =>
+  fetcher<void>(`/api/videojuegos/${videojuegoId}`, { method: "DELETE" });

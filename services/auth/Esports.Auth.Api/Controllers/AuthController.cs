@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using Esports.Auth.Api.Domain;
 using Esports.Auth.Api.Dtos;
 using Esports.Auth.Api.Repositories;
@@ -23,12 +24,14 @@ public class AuthController : ControllerBase
     private readonly IUsuarioRepository _usuarios;
     private readonly IPasswordService _passwords;
     private readonly ITokenService _tokens;
+    private readonly string _bootstrapAdmin;
 
-    public AuthController(IUsuarioRepository usuarios, IPasswordService passwords, ITokenService tokens)
+    public AuthController(IUsuarioRepository usuarios, IPasswordService passwords, ITokenService tokens, IConfiguration config)
     {
         _usuarios = usuarios;
         _passwords = passwords;
         _tokens = tokens;
+        _bootstrapAdmin = config["Auth:AdminUser"] ?? "admin";
     }
 
     [HttpPost("login")]
@@ -87,6 +90,52 @@ public class AuthController : ControllerBase
             });
 
         return StatusCode(StatusCodes.Status201Created);
+    }
+
+    [HttpGet("usuarios")]
+    [Authorize(Roles = AuthConstants.Roles.Admin)]
+    public async Task<IActionResult> ListarUsuarios()
+    {
+        var usuarios = await _usuarios.GetAllAsync();
+        var resultado = usuarios
+            .OrderBy(u => u.Username, StringComparer.Ordinal)
+            .Select(u => new UsuarioResumenResponse(u.Username, u.Rol, u.NombreDisplay, u.OrganizadorId, u.EquipoId));
+        return Ok(resultado);
+    }
+
+    [HttpDelete("usuarios/{username}")]
+    [Authorize(Roles = AuthConstants.Roles.Admin)]
+    public async Task<IActionResult> EliminarUsuario(string username)
+    {
+        var objetivo = username.Trim();
+        var actual = User.FindFirstValue(AuthConstants.Claims.Username) ?? User.Identity?.Name;
+
+        if (string.Equals(objetivo, actual, StringComparison.Ordinal))
+            return Conflict(new ProblemDetails
+            {
+                Title = "Operación no permitida",
+                Status = StatusCodes.Status409Conflict,
+                Detail = "No podés eliminar tu propia cuenta mientras estás autenticado.",
+            });
+
+        if (string.Equals(objetivo, _bootstrapAdmin, StringComparison.Ordinal))
+            return Conflict(new ProblemDetails
+            {
+                Title = "Operación no permitida",
+                Status = StatusCodes.Status409Conflict,
+                Detail = "El administrador del sistema no puede eliminarse.",
+            });
+
+        var eliminado = await _usuarios.DeleteAsync(objetivo);
+        if (!eliminado)
+            return NotFound(new ProblemDetails
+            {
+                Title = "Usuario no encontrado",
+                Status = StatusCodes.Status404NotFound,
+                Detail = $"No existe el usuario '{objetivo}'.",
+            });
+
+        return NoContent();
     }
 
     [HttpGet("me")]

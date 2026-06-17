@@ -121,8 +121,8 @@ function OrgOverview({ organizadorId }: { organizadorId: string }) {
               className="flex items-center justify-between px-4 py-3 hover:bg-secondary/40 transition-colors"
             >
               <div>
-                <p className="text-sm font-semibold text-foreground">{t.nombre}</p>
-                <p className="eyebrow mt-0.5">{t.codigo}</p>
+                <p className="text-sm font-semibold text-foreground">{t.nombreTorneo}</p>
+                <p className="eyebrow mt-0.5">{t.nombreVideojuego}</p>
               </div>
               <span className="text-xs text-muted-foreground">→</span>
             </Link>

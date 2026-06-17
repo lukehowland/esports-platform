@@ -1,272 +1,104 @@
-# Handoff - Esports Platform auth-service
+# Handoff — Esports Platform: frontend redesign + auth real
 
 Fecha: 2026-06-16
-Repo: `/Users/lukesito/dev/src/github.com/lukehowland/esports-platform`  
-Rama de trabajo: `feat/auth-service`
-Motivo: este archivo deja el contexto listo para que CloudCode/Claude continue si esta sesion se queda sin limite.
+Repo: `/Users/lukesito/dev/src/github.com/lukehowland/esports-platform`
+Rama de trabajo: `main` (los fixes de esta sesión se integran por PR `fix/frontend-audit`)
+Generado por: Claude
 
-Este handoff reemplaza el handoff viejo. El anterior mezclaba estado de `main`, commits locales antiguos y una seccion auth pegada al final. Esta version es la fuente actual para retomar la rama.
+Este handoff reemplaza al anterior (que cubría la fase de backend `auth-service`, ya
+mergeada a `main`). Ahora documenta el estado tras completar el **rediseño completo del
+frontend con auth JWT real, interfaz por rol y diseño "Broadcast HUD"**, más una auditoría
+visual de toda la app.
+
+---
+
+## ⚠️ ESTADO FINAL — QUÉ NO HACER AL RETOMAR
+
+- [ ] **NO reimplementar el frontend.** El rediseño HUD + auth real ya está completo, auditado y commiteado (`acf07ec` en `origin/main` + fixes en esta tanda).
+- [ ] **NO reescribir la auth del backend.** El microservicio `auth` + RBAC por servicio ya está hecho, testeado (122/122) y mergeado a `main`. Está intacto.
+- [ ] **NO cambiar los chips de país de `/jugadores` a nombres completos.** El dato guarda país como **ISO-2** (`KR`, `US`, `BR`). Consultar por nombre completo devuelve vacío. Los chips usan código ISO-2 con etiqueta legible a propósito.
+- [ ] **NO usar `.nombre`/`.codigo` sobre objetos de `getTorneosPorOrganizador`, `getTorneosPorFecha` o `getTorneosPorEquipo`.** Esos endpoints devuelven `TorneoResumenResponse`/`TorneoPorEquipoResponse` con `nombreTorneo`/`nombreVideojuego`. Solo `TorneoResponse` (de `getTorneoPorId`) y `TorneoPorCodigoResponse` tienen `nombre`/`codigo`.
+- [ ] **NO asumir que `npm`/`node` están disponibles fuera de Docker.** Por seguridad, no hay runtime local; todo va por Docker. (El type-check se puede correr solo con un binario de node ya cacheado, en modo lectura.)
+
+---
 
 ## Estado ejecutivo
 
-La plataforma ya tenia los fixes de infraestructura/datos/frontend manual hechos antes de la rama auth:
+Stack completo funcionando con un solo `docker compose up --build`. Cold-boot desde cero
+(`down -v` + `up --build`) verificado: los 9 contenedores quedan `healthy`, el seeder corre
+solo, autentica como admin, puebla datos + ranking por eventos, registra usuarios demo por
+rol y termina `Exited (0)`. **No hace falta ningún paso secundario manual.** El frontend
+rediseñado (HUD de transmisión, violeta+lima, Rajdhani) está vivo en `http://localhost:3000`
+con login JWT real e interfaz diferenciada por rol. Auditoría visual completa: todas las
+páginas públicas + los 4 flujos de rol funcionan, sin errores de consola.
 
-- `docker compose down` elimina el entorno demo porque Cassandra no usa volumen persistente en Compose.
-- `docker compose up --build -d` levanta Cassandra, RabbitMQ, servicios, gateway, seeder y frontend.
-- El seeder corre automaticamente, autentica como admin, carga dataset rico e idempotente, registra usuarios demo por rol y termina `Exited (0)`.
-- El manual del frontend funciona en Docker porque `MANUAL-USUARIO.md` se copia a la imagen.
-- El backend rechaza entradas vacias o basura antes de escribir en Cassandra.
+---
 
-Sobre eso, esta rama agrega el microservicio `auth` y RBAC real en backend. Ya no dependemos de roles simulados solo en `localStorage`.
+## Estado verificado
 
-## Estado actual verificado
-
-Ultima verificacion hecha antes de este handoff:
-
-```bash
-docker compose config --quiet
-git diff --check
-docker compose build tests
-docker compose down --remove-orphans
-docker compose up --build -d
-docker compose run --rm --no-deps tests
-docker compose down --remove-orphans
-docker compose up --build -d
-docker compose ps --all
-docker compose logs --tail=35 seeder
-```
-
-Resultados:
-
-- Compose valido.
-- Sin whitespace errors en `git diff --check`.
-- Arranque limpio desde cero completado.
-- Todos los contenedores quedan healthy: `auth`, `teams`, `tournaments`, `matches`, `ranking`, `gateway`, `frontend`, `cassandra`, `rabbitmq`.
-- `seeder` queda `Exited (0)`.
-- Tests de integracion: `122/122` pasan.
-- Despues de correr tests se hizo otro `down`/`up --build -d`, asi que el stack actual quedo limpio, solo con datos del seeder.
-
-Estado Docker final observado:
+Última verificación antes de este handoff (cold-boot real desde cero):
 
 ```text
-auth          healthy  5005
-teams         healthy  5001
-tournaments   healthy  5002
-matches       healthy  5003
-ranking       healthy  5004
-gateway       healthy  8080
-frontend      healthy  3000
-cassandra     healthy  9042
-rabbitmq      healthy  5672 / 15672
+docker compose down -v --remove-orphans   → OK (borra volúmenes, simula primera vez)
+docker compose up --build -d              → exit 0
+
+docker compose ps --all:
+auth          healthy   5005
+cassandra     healthy   9042
+frontend      healthy   3000
+gateway       healthy   8080
+matches       healthy   5003
+rabbitmq      healthy   5672 / 15672
+ranking       healthy   5004
+teams         healthy   5001
+tournaments   healthy   5002
 seeder        Exited (0)
+
+Frontend type-check (tsc --noEmit): exit 0 (sin errores)
+Smoke tests gateway: organizadores/torneos OK, login admin OK (token 279 chars),
+  /api/auth/me OK, mutación sin token → 401.
+Auditoría visual: home, login, jugadores, rankings (Q7+Q23), manual, torneos,
+  torneos/[id] (Equipos/Partidas/Premios), equipos, videojuegos, organizadores,
+  partidas, panel admin, panel organizador, cockpit capitán, home fan → todas OK.
+Console errors: ninguno.
+
+Tests de integración backend: 122/122 (no re-ejecutados en esta sesión; sin cambios
+  de backend salvo Q23, ya cubierto y mergeado).
 ```
 
-## Branch y commits base
+---
 
-Rama actual:
+## Qué se hizo en esta fase (frontend)
 
-```bash
-git status --short --branch
-# ## feat/auth-service
-```
+Auth real de punta a punta:
+- `localStorage` key `esports-token`; `fetcher` adjunta `Authorization: Bearer`.
+- `login()` real contra `/api/auth/login`; `me()` hidrata identidad al cargar; `logout()` limpia.
+- Login con usuario/contraseña + accesos rápidos demo (admin/organizador/capitán/fan).
+- `RequireRole` protege rutas; redirect según rol.
 
-Antes de los commits de auth, el log local tenia:
+Interfaz diferenciada por rol (el sidebar NO es universal — decisión de diseño):
+- **admin → sidebar** backoffice (equipos, organizadores, videojuegos, torneos, **usuarios**).
+- **organizador → sidebar** propio (mis torneos filtrados por `organizadorId`, crear torneo, videojuegos).
+- **capitán → cockpit single-column** (su único equipo, tabs roster/agregar/torneos). Sin rail a propósito.
+- **fan → experiencia pública** con navbar (solo lectura), sin panel.
 
-```text
-e0b1349 docs: update handoff and automatic seed guidance
-c2321d5 fix(api): reject invalid demo data inputs
-817b4fa fix(frontend): include user manual in Docker image
-0582107 feat(seed): load rich idempotent demo dataset
-ae5302c build(infra): run seeder after clean compose startup
-8e58d4d origin/main build(infra): add frontend service to compose
-```
+Diseño "Broadcast HUD":
+- Paleta violeta `#7C3AED` + lima `#C2FF3D` sobre `void #0A0A0F`.
+- Tipografía Rajdhani (display) + Inter (body) + JetBrains Mono (datos/eyebrows).
+- Paneles angulares (`hud-clip`), `StatTile`, scoreboard como elemento firma de la home.
 
-Importante: `origin/main` estaba en `8e58d4d`. La rama `feat/auth-service` contiene tambien los commits locales de infraestructura/seeder/manual/validaciones hechos antes de auth. Si se crea PR contra `main`, el PR incluira esos commits y los de auth, salvo que antes se actualice `origin/main`.
+Bugs cerrados (todos verificados en la auditoría):
+- **Jugadores en blanco** → tabs Q1 (nickname) / Q2 (país) con chips ISO-2 y datos por defecto.
+- **Ranking Q23 con IDs** → resuelve nicknames (backend: evento `TeamRegisteredToTournament` lleva `JugadorRef(Id, Nickname)`; ranking guarda `ranking_jugadores_meta`; frontend muestra nombre).
+- **Manual frágil** → import del `.md` como raw string bundleado + `prose`; ya no lee de `process.cwd()`.
+- **Radix `<SelectItem value="">`** → centinela `"__none__"` → `undefined`.
+- **Chips de país con nombre completo** (encontrado en esta auditoría) → ahora ISO-2.
 
-## Plan original de auth
+---
 
-El plan que ejecuto el agente anterior esta en:
+## Dataset del seeder (crítico)
 
-```bash
-cat ~/.claude/plans/peaceful-hatching-hoare.md
-sed -n '1,240p' ~/.claude/plans/peaceful-hatching-hoare.md
-```
-
-Resumen del plan:
-
-- Agregar `shared/Esports.Auth.Shared`.
-- Agregar microservicio `services/auth/Esports.Auth.Api`.
-- Agregar ruta `/api/auth/**` al gateway.
-- Proteger mutaciones de `teams`, `tournaments` y `matches`.
-- Adaptar seeder para autenticarse como admin y registrar usuarios demo.
-- Adaptar tests y documentacion.
-- No tocar frontend en esta tanda.
-
-## Arquitectura actual
-
-Servicios:
-
-| Servicio | Keyspace | Puerto host | Responsabilidad |
-|---|---|---:|---|
-| `auth` | `esports_auth` | 5005 | login, registro admin-only, JWT, roles |
-| `teams` | `esports_teams` | 5001 | equipos y jugadores |
-| `tournaments` | `esports_tournaments` | 5002 | videojuegos, organizadores, torneos, inscripciones, premios |
-| `matches` | `esports_matches` | 5003 | partidas y enfrentamientos |
-| `ranking` | `esports_ranking` | 5004 | read models por eventos |
-| `gateway` | n/a | 8080 | YARP, entrada unica |
-| `frontend` | n/a | 3000 | Next.js |
-
-Reglas duras que siguen vigentes:
-
-- Un keyspace por servicio.
-- No cross-keyspace.
-- Lecturas entre servicios por `HttpClient` tipado.
-- Eventos por MassTransit/RabbitMQ.
-- Ranking usa counters y solo se escribe por eventos.
-- Mutaciones multi-tabla dentro del mismo servicio usan `BATCH`.
-- Frontend debe consumir el gateway, no servicios directos.
-
-## Auth implementado
-
-Nuevo proyecto compartido:
-
-- `shared/Esports.Auth.Shared/AuthConstants.cs`
-- `shared/Esports.Auth.Shared/ClaimsPrincipalExtensions.cs`
-- `shared/Esports.Auth.Shared/JwtAuthExtensions.cs`
-
-Nuevo microservicio:
-
-- `services/auth/Esports.Auth.Api`
-- Keyspace: `esports_auth`
-- Tabla: `usuarios`
-- Admin demo sembrado por `SchemaInitializer`.
-- Passwords con PBKDF2.
-- JWT HS256 con `Jwt__Secret`, `Jwt__Issuer`, `Jwt__Audience`.
-
-Endpoints:
-
-- `POST /api/auth/login`
-- `POST /api/auth/register`
-- `GET /api/auth/me`
-
-`/api/auth/register` esta protegido con rol `admin` y ahora valida combinaciones de rol:
-
-- `admin`: sin `organizadorId` ni `equipoId`.
-- `fan`: sin `organizadorId` ni `equipoId`.
-- `organizador`: requiere `organizadorId` y no puede tener `equipoId`.
-- `capitan`: requiere `equipoId` y no puede tener `organizadorId`.
-- Roles invalidos devuelven `400 BadRequest`.
-
-Correcciones hechas durante auditoria:
-
-- `UsuarioRepository` usaba `ISession` ambiguo; se corrigio con `global::Cassandra.ISession`.
-- Dockerfiles de `teams`, `tournaments` y `matches` no copiaban `shared/Esports.Auth.Shared/*.csproj` antes de restore.
-- `/api/auth/me` devolvia username vacio; se agrego claim `username` y `NameClaimType`.
-- Se endurecio `register` para impedir identidades RBAC mal formadas.
-
-## RBAC actual
-
-Lecturas `GET` Q1-Q24 quedan publicas.
-
-Mutaciones protegidas:
-
-| Endpoint | Regla |
-|---|---|
-| `POST /api/equipos` | solo `admin` |
-| `POST /api/equipos/{equipoId}/jugadores` | `admin` o `capitan` con `equipo_id == equipoId` |
-| `POST /api/videojuegos` | `admin` u `organizador` |
-| `POST /api/organizadores` | solo `admin` |
-| `POST /api/torneos` | `admin` u `organizador` con `organizador_id == organizadorId` |
-| `POST /api/torneos/{torneoId}/inscripciones` | `admin` o `capitan` con `equipo_id == equipoId` |
-| `POST /api/torneos/{torneoId}/premios` | `admin` u `organizador` dueno del torneo |
-| `POST /api/partidas` | `admin` u `organizador` dueno del torneo |
-| `POST /api/auth/register` | solo `admin` y rol/vinculos validos |
-
-Para `POST /api/partidas`, `matches` no lee otro keyspace. Usa `TournamentsClient` tipado contra `tournaments` para verificar el `organizadorId` del torneo.
-
-Respuesta esperada:
-
-- Sin token: `401`.
-- Token valido pero rol/ownership incorrecto: `403`.
-- Registro de usuario con rol/vinculos incoherentes: `400`.
-
-## Tests RBAC
-
-Archivo principal:
-
-- `tests/Esports.Gateway.Tests/AuthTests.cs`
-
-Cobertura de auth/RBAC agregada:
-
-- Login admin y `/api/auth/me` con `username`.
-- Usuarios demo tienen rol y vinculo correctos:
-  - `org_riot` -> `organizador` + `RIOTId`
-  - `cap_t1` -> `capitan` + `T1Id`
-  - `fan_demo` -> `fan`
-- Lecturas publicas siguen funcionando sin token.
-- Mutacion sin token devuelve `401`.
-- Fan no puede registrar usuario ni crear videojuego.
-- Admin puede registrar fan.
-- Admin no puede registrar rol invalido.
-- Admin no puede registrar organizador sin `organizadorId`.
-- Admin no puede registrar capitan sin `equipoId`.
-- Admin no puede registrar fan con vinculo a equipo.
-- Organizador puede crear videojuego.
-- Organizador no puede crear otro organizador.
-- Organizador no puede crear torneo para otro organizador.
-- Organizador puede crear torneo propio.
-- Capitan no puede crear equipo.
-- Capitan puede agregar jugador a su equipo.
-- Capitan no puede agregar jugador a equipo ajeno.
-- Capitan puede inscribir su equipo.
-- Capitan no puede inscribir equipo ajeno.
-- Organizador puede asignar premio en torneo propio.
-- Organizador no puede asignar premio en torneo ajeno.
-- Organizador puede registrar partida de torneo propio.
-- Organizador no puede registrar partida de torneo ajeno.
-
-La suite completa paso:
-
-```text
-Total tests: 122
-Passed: 122
-```
-
-Warnings no bloqueantes observados:
-
-- xUnit analyzer: algunos `Assert.True` deberian ser `Assert.Contains`.
-- `Newtonsoft.Json` 9.0.1 aparece con advisory NU1903 por dependencia transitiva.
-- `Rfc2898DeriveBytes` constructor usado en `PasswordService` marca SYSLIB0060; conviene migrar luego a `Rfc2898DeriveBytes.Pbkdf2`.
-
-## Seeder y usuarios demo
-
-El seeder:
-
-- Hace login admin en `/api/auth/login`.
-- Envia `Authorization: Bearer <token>` en todos los POSTs.
-- Puebla datos conectados y ranking por eventos.
-- Registra usuarios demo por rol al final.
-
-Credenciales demo:
-
-```text
-admin / admin-dev-password
-org_riot / OrgDemo2024
-org_esl / OrgDemo2024
-org_vct / OrgDemo2024
-cap_t1 / CapDemo2024
-cap_navi / CapDemo2024
-cap_g2 / CapDemo2024
-fan_demo / FanDemo2024
-```
-
-Hay mas usuarios `org_<code>` y `cap_<tag>` creados por el seeder. Ver logs:
-
-```bash
-docker compose logs seeder
-```
-
-Resumen del seed observado:
+Conteos de la última corrida (cold-boot de esta sesión):
 
 ```text
 Equipos: 40
@@ -277,155 +109,97 @@ Ranking equipos por victorias: 40
 Ranking jugadores activos: 50
 ```
 
-## Archivos principales tocados
+Hechos no obvios:
+- **País se guarda como ISO-2** (`KR`, `US`, `BR`, `UA`, `CN`, `DE`, `FR`, `DK`…), no nombre completo. Q2 (`/api/jugadores/por-pais/{pais}`) espera el código.
+  - Conteos reales por país: `KR=19, CN=30, BR=21, US=16, DE=9, DK=9, FR=5, UA=4`. `AR` y `CO` = 0.
+- **T1 tiene exactamente 3 jugadores explícitos**: Faker (MID), Gumayusi (ADC), Zeus (TOP). No 5.
+- **Los UUID se regeneran en cada cold-boot** (`down -v`). No hardcodear IDs de torneo/equipo en pruebas manuales; pedirlos a la API (`/api/torneos/por-fecha`).
+- Organizadores (nombre exacto en Cassandra): `LoL Esports`, `PGL`, `Riot Games`, `BLAST Premier`, `VALORANT Champions Tour`, `ESL FACEIT Group`, `UNIVALLE Esports`.
 
-Auth/shared:
-
-- `shared/Esports.Auth.Shared/*`
-- `services/auth/Esports.Auth.Api/*`
-- `Esports.sln`
-
-Servicios protegidos:
-
-- `services/teams/Esports.Teams.Api/Controllers/EquiposController.cs`
-- `services/teams/Esports.Teams.Api/Program.cs`
-- `services/teams/Esports.Teams.Api/Esports.Teams.Api.csproj`
-- `services/teams/Esports.Teams.Api/Dockerfile`
-- `services/tournaments/Esports.Tournaments.Api/Controllers/*.cs`
-- `services/tournaments/Esports.Tournaments.Api/Program.cs`
-- `services/tournaments/Esports.Tournaments.Api/Esports.Tournaments.Api.csproj`
-- `services/tournaments/Esports.Tournaments.Api/Dockerfile`
-- `services/matches/Esports.Matches.Api/Controllers/PartidasController.cs`
-- `services/matches/Esports.Matches.Api/Clients/TournamentsClient.cs`
-- `services/matches/Esports.Matches.Api/Program.cs`
-- `services/matches/Esports.Matches.Api/Esports.Matches.Api.csproj`
-- `services/matches/Esports.Matches.Api/Dockerfile`
-
-Infra/seeder/tests/docs:
-
-- `docker-compose.yml`
-- `gateway/Esports.Gateway/appsettings.json`
-- `tools/Esports.Seeder/Program.cs`
-- `tests/Esports.Gateway.Tests/*`
-- `AGENTS.md`
-- `CLAUDE.md`
-- `README.MD`
-- `USER-STORIES.md`
-- `docs/01-arquitectura.md`
-- `docs/03-convenciones.md`
-- `docs/04-contratos-api.md`
-- `docs/06-docker-setup.md`
-- `docs/07-plan-ejecucion.md`
-- `Handoff.md`
-
-## Commits recomendados para cerrar esta rama
-
-Mantener Conventional Commits en ingles segun `docs/08-commits.md`.
-
-Orden recomendado:
+Usuarios demo (password fija, públicas del seeder):
 
 ```text
-feat(auth): add JWT auth service
-feat(auth): enforce role ownership on mutations
-build(infra): wire auth through compose and gateway
-fix(seed): authenticate demo data writes
-test(auth): cover role ownership rules
-docs(auth): document auth service handoff
+admin                 / admin-dev-password
+org_<code>            / OrgDemo2024   (ej: org_riot → Riot Games, org_esl, org_vct)
+cap_<tag>             / CapDemo2024   (ej: cap_t1 → T1, cap_navi, cap_g2)
+fan_demo              / FanDemo2024
 ```
 
-Notas:
+---
 
-- El commit docs debe incluir este `Handoff.md`.
-- Los commits anteriores de datos/infra ya existen en la rama antes de auth.
-- Si se crea PR ahora contra `main`, incluira tambien esos commits locales no presentes en `origin/main`.
+## Archivos tocados en esta sesión
 
-## Pull request
+Frontend (fixes post-rediseño + audit):
+- `frontend/src/app/mi-equipo/page.tsx` — usar `nombreTorneo`/`nombreVideojuego` (TorneoPorEquipoResponse).
+- `frontend/src/app/panel/page.tsx` — `OrgOverview` usar `nombreTorneo`/`nombreVideojuego` (TorneoResumenResponse).
+- `frontend/src/app/jugadores/page.tsx` — chips de país por ISO-2 + default `KR` + uppercase input.
 
-Pendiente en el momento de escribir este handoff:
+(El grueso del rediseño + auth real está en el commit `acf07ec`, ya en `origin/main`.)
 
-```bash
-git push -u origin feat/auth-service
-gh pr create --base main --head feat/auth-service
-```
+---
 
-Usar titulo sugerido:
+## Commits de esta sesión (adelante de origin/main)
 
 ```text
-feat(auth): add JWT auth service and backend RBAC
+1858ca8 fix(frontend): query players by ISO-2 country code (Q2)
+b521706 fix(frontend): use TorneoResumenResponse fields in org overview
+de6440a fix(frontend): use correct TorneoPorEquipoResponse field names in mi-equipo
 ```
 
-Cuerpo sugerido:
+`acf07ec feat(frontend): complete HUD redesign with real JWT auth and role interfaces`
+ya está en `origin/main` (mergeado por PR #2).
+
+---
+
+## Decisiones tomadas (con justificación)
+
+- **Sidebar solo para admin y organizador.** Tienen varias áreas de gestión paralelas. Capitán gestiona una sola entidad (cockpit enfocado) y fan no gestiona nada (público). Forzar un rail a esos roles sería decoración, no estructura.
+- **Token en `localStorage`** (demo académico): sobrevive refresh y se valida con `/api/auth/me` al cargar. La seguridad real está en el backend (cada servicio valida JWT + ownership).
+- **Chips de país por ISO-2**: el dato es ISO-2; mostrar nombre y consultar por código.
+- **Q23 con tabla `ranking_jugadores_meta` aparte**: la tabla counter no admite columnas no-counter. El nickname vive en una tabla plana en el mismo keyspace `esports_ranking` (no cross-keyspace).
+- **Git por PR, no push directo a `main`.** El push directo está bloqueado por política; los fixes se integran por rama + PR.
+
+---
+
+## Warnings conocidos (no bloqueantes)
 
 ```text
-## Summary
-- Add auth microservice with JWT login/register/me and demo admin seed.
-- Protect backend mutations with role and ownership checks across teams, tournaments, and matches.
-- Authenticate the seeder and register demo users by role.
-- Update docs and handoff for CloudCode continuation.
-
-## Verification
-- docker compose config --quiet
-- git diff --check
-- docker compose down --remove-orphans
-- docker compose up --build -d
-- docker compose run --rm --no-deps tests
-
-## Test result
-- 122/122 integration tests passing.
+- SYSLIB0060: Rfc2898DeriveBytes constructor deprecated en PasswordService (deuda técnica).
+- NU1903: Newtonsoft.Json 9.0.1 advisory (transitiva de xunit, no controlable).
+- xUnit analyzer: algunos Assert.True deberían ser Assert.Contains.
 ```
 
-## Siguiente fase: frontend con auth real
+---
 
-No se toco frontend en esta tanda por decision de alcance. Siguiente agente debe:
+## Siguiente fase — acción concreta
 
-- Reemplazar el selector demo/localStorage por login real contra `/api/auth/login`.
-- Guardar token de forma razonable para demo.
-- Llamar `/api/auth/me` al cargar sesion.
-- Adjuntar `Authorization: Bearer <token>` en mutaciones.
-- Renderizar home/dashboard distinto por rol:
-  - `admin`: backoffice y carga/setup.
-  - `organizador`: crear videojuegos, torneos, premios y partidas solo propias.
-  - `capitan`: gestionar su equipo e inscribirlo.
-  - `fan`: lectura/rankings/manual/torneos.
-- Ocultar acciones no permitidas por rol, pero recordar que la seguridad real esta en backend.
-- Arreglar problemas detectados previamente:
-  - selector de rol no cambiaba la experiencia real.
-  - login era solo frontend.
-  - pagina de jugadores no mostraba datos.
-  - ranking mostraba IDs donde deberia resolver nombres.
-  - revisar manual en UI.
+### Qué hacer (si el usuario lo pide)
+1. Integrar los commits de esta sesión por PR `fix/frontend-audit` → `main` y sincronizar local.
+2. (Opcional) Pulir mutaciones felices end-to-end por UI: organizador crea torneo propio (201), capitán agrega jugador a su equipo (201), admin registra usuario (201). El backend ya lo soporta; verificar el feedback de UI (toasts/ProblemDetails) en cada caso.
+3. (Opcional) Revisar accesibilidad fina (focus por teclado, `prefers-reduced-motion`) en las páginas nuevas.
 
-## Como retomar rapido
+### Qué NO tocar
+- Backend `auth`/RBAC, tests, seeder: estables y mergeados.
+- El sistema de diseño HUD y la decisión de layout por rol.
 
-Comandos:
+### Preguntas abiertas
+- Ninguna bloqueante.
+
+---
+
+## Cómo retomar en 60 segundos
 
 ```bash
 cd /Users/lukesito/dev/src/github.com/lukehowland/esports-platform
 git status --short --branch
-git log --oneline --decorate -n 12
-docker compose ps --all
-docker compose logs --tail=80 seeder
-docker compose run --rm --no-deps tests
-```
-
-Si hay duda sobre el plan original:
-
-```bash
-cat ~/.claude/plans/peaceful-hatching-hoare.md
-```
-
-Si se quiere refrescar desde cero:
-
-```bash
-docker compose down --remove-orphans
+git log --oneline --decorate -n 8
 docker compose up --build -d
-docker compose ps --all
+docker compose ps --all          # todos healthy, seeder Exited (0)
+docker compose logs --tail=30 seeder
 ```
 
 Estado deseado al retomar:
-
-- Rama `feat/auth-service`.
-- Stack arriba y healthy.
-- Seeder `Exited (0)`.
-- Backend auth/RBAC listo y testeado.
-- Trabajo pendiente principal: frontend conectado a auth real y PR review/merge.
+- Rama `main`, sincronizada con `origin/main` (tras mergear el PR de esta sesión).
+- Stack arriba y healthy, seeder `Exited (0)`.
+- Frontend en `http://localhost:3000` con login JWT real e interfaz por rol.
+- Backend auth/RBAC listo y testeado (122/122).

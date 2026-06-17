@@ -192,7 +192,7 @@ function OrgOverview({ organizadorId }: { organizadorId: string }) {
           <Link href="/panel/crear-torneo"><Trophy className="w-4 h-4 mr-1.5" /> Nuevo torneo</Link>
         </Button>
         <Button variant="outline" asChild>
-          <Link href="/panel/videojuegos"><Gamepad2 className="w-4 h-4 mr-1.5" /> Gestionar videojuegos</Link>
+          <Link href="/panel/mis-torneos"><Gamepad2 className="w-4 h-4 mr-1.5" /> Gestionar torneos</Link>
         </Button>
       </div>
 

@@ -19,7 +19,6 @@ const organizadorNav: PanelNavItem[] = [
   { href: "/panel",                  label: "Mi Panel",      icon: "LayoutDashboard" },
   { href: "/panel/mis-torneos",      label: "Mis torneos",   icon: "Trophy" },
   { href: "/panel/crear-torneo",     label: "Nuevo torneo",  icon: "PlusCircle" },
-  { href: "/panel/videojuegos",      label: "Videojuegos",   icon: "Gamepad2" },
 ];
 
 export function getPanelNav(rol: Rol): PanelNavItem[] {

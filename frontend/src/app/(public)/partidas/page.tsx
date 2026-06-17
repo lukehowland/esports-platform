@@ -1,8 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { Swords, Calendar, Users } from "lucide-react";
+import { useQueries, useQuery } from "@tanstack/react-query";
+import { Swords, Calendar, Users, Radio } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { HudPanel, HudEyebrow } from "@/components/hud-panel";
 import { Input } from "@/components/ui/input";
@@ -14,9 +14,75 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { EmptyState } from "@/components/empty-state";
 import { ErrorState } from "@/components/error-state";
 import { ResultadoBadge } from "@/components/resultado-badge";
-import { getPartidasPorFecha, getPartidasEntre } from "@/lib/api/partidas";
+import { getPartidasPorFecha, getPartidasEntre, getPartidasPorTorneo } from "@/lib/api/partidas";
 import { getEquiposPorFecha } from "@/lib/api/equipos";
+import { getTorneosPorFecha } from "@/lib/api/torneos";
 import { formatDate, formatDateTime } from "@/lib/utils";
+
+// Query-first: no hay "listar todas las partidas". Las más recientes se componen
+// abriendo cada torneo (Q12) y juntando sus partidas (Q16), ordenadas por fecha desc.
+function PartidasRecientes() {
+  const { data: torneos, isLoading: loadingTorneos, error, refetch } = useQuery({
+    queryKey: ["torneos", "por-fecha"],
+    queryFn: getTorneosPorFecha,
+  });
+
+  const { partidas, cargandoPartidas } = useQueries({
+    queries: (torneos ?? []).map((t) => ({
+      queryKey: ["partidas", "por-torneo", t.torneoId],
+      queryFn: () => getPartidasPorTorneo(t.torneoId),
+      enabled: torneos !== undefined,
+    })),
+    combine: (results) => {
+      const partidas = results.flatMap((r, i) =>
+        (r.data ?? []).map((p) => ({ ...p, nombreTorneo: torneos?.[i]?.nombreTorneo ?? "" }))
+      );
+      partidas.sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime());
+      return { partidas, cargandoPartidas: results.some((r) => r.isLoading) };
+    },
+  });
+
+  const cargando = loadingTorneos || cargandoPartidas;
+  const recientes = partidas.slice(0, 40);
+
+  if (error) return <ErrorState error={error} onRetry={refetch} />;
+
+  if (cargando) return <Skeleton className="h-64" />;
+
+  if (recientes.length === 0)
+    return <EmptyState title="Sin partidas" description="Todavía no hay partidas registradas." />;
+
+  return (
+    <HudPanel>
+      <div className="px-4 py-2 border-b border-line flex items-center gap-2">
+        <Radio className="h-3.5 w-3.5 text-lime" />
+        <HudEyebrow>últimas {recientes.length} partidas</HudEyebrow>
+      </div>
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>Torneo</TableHead>
+            <TableHead>Local</TableHead>
+            <TableHead>Visitante</TableHead>
+            <TableHead>Resultado</TableHead>
+            <TableHead>Fecha</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {recientes.map((p) => (
+            <TableRow key={p.partidaId}>
+              <TableCell className="text-muted-foreground text-sm">{p.nombreTorneo}</TableCell>
+              <TableCell className="font-medium">{p.nombreLocal}</TableCell>
+              <TableCell className="text-muted-foreground">{p.nombreVisitante}</TableCell>
+              <TableCell><ResultadoBadge resultado={p.resultado} /></TableCell>
+              <TableCell className="text-muted-foreground">{formatDateTime(p.fecha)}</TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    </HudPanel>
+  );
+}
 
 function PartidaPorFecha() {
   const [fecha, setFecha] = useState("");
@@ -183,11 +249,15 @@ export default function PartidasPage() {
         </h1>
       </div>
 
-      <Tabs defaultValue="fecha">
+      <Tabs defaultValue="recientes">
         <TabsList>
+          <TabsTrigger value="recientes"><Radio className="h-3.5 w-3.5 mr-1" /> Recientes</TabsTrigger>
           <TabsTrigger value="fecha"><Calendar className="h-3.5 w-3.5 mr-1" /> Por fecha (Q18)</TabsTrigger>
           <TabsTrigger value="h2h"><Users className="h-3.5 w-3.5 mr-1" /> Cara a cara (Q19)</TabsTrigger>
         </TabsList>
+        <TabsContent value="recientes">
+          <PartidasRecientes />
+        </TabsContent>
         <TabsContent value="fecha">
           <PartidaPorFecha />
         </TabsContent>

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQueries, useQuery } from "@tanstack/react-query";
 import { Gamepad2, ChevronDown, ChevronRight } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { EmptyState } from "@/components/empty-state";
@@ -11,6 +11,7 @@ import { getVideojuegosPorGenero, getTorneosPorVideojuego } from "@/lib/api/torn
 import { formatDate } from "@/lib/utils";
 
 const GENEROS = ["MOBA", "FPS", "BATTLE_ROYALE", "RTS", "FIGHTING", "SPORTS", "RPG"];
+const TODOS = "TODOS";
 
 function TorneosPorVideojuego({ videojuegoId, nombre }: { videojuegoId: string; nombre: string }) {
   const [expanded, setExpanded] = useState(false);
@@ -51,12 +52,37 @@ function TorneosPorVideojuego({ videojuegoId, nombre }: { videojuegoId: string; 
 }
 
 export default function VideojuegosPage() {
-  const [generoSeleccionado, setGeneroSeleccionado] = useState("MOBA");
+  const [generoSeleccionado, setGeneroSeleccionado] = useState(TODOS);
 
-  const { data, isLoading, error, refetch } = useQuery({
-    queryKey: ["videojuegos", generoSeleccionado],
-    queryFn: () => getVideojuegosPorGenero(generoSeleccionado),
+  // Query-first: no hay "listar todos los videojuegos". Se hace fan-out por los 7
+  // géneros (Q8), se etiqueta cada juego con su género y se filtra en memoria. Así
+  // "TODOS" muestra el catálogo completo y los chips filtran sin pedir de nuevo.
+  const { juegos, cargando, error } = useQueries({
+    queries: GENEROS.map((g) => ({
+      queryKey: ["videojuegos", g],
+      queryFn: () => getVideojuegosPorGenero(g),
+    })),
+    combine: (results) => {
+      const seen = new Set<string>();
+      const juegos: { videojuegoId: string; nombre: string; genero: string }[] = [];
+      results.forEach((r, i) => {
+        for (const vg of r.data ?? []) {
+          if (!seen.has(vg.videojuegoId)) {
+            seen.add(vg.videojuegoId);
+            juegos.push({ videojuegoId: vg.videojuegoId, nombre: vg.nombre, genero: GENEROS[i] });
+          }
+        }
+      });
+      return {
+        juegos,
+        cargando: results.some((r) => r.isLoading),
+        error: results.find((r) => r.error)?.error ?? null,
+      };
+    },
   });
+
+  const visibles =
+    generoSeleccionado === TODOS ? juegos : juegos.filter((j) => j.genero === generoSeleccionado);
 
   return (
     <div className="space-y-6">
@@ -69,7 +95,7 @@ export default function VideojuegosPage() {
 
       {/* Selector de género */}
       <div className="flex flex-wrap gap-1.5">
-        {GENEROS.map((g) => (
+        {[TODOS, ...GENEROS].map((g) => (
           <button
             key={g}
             onClick={() => setGeneroSeleccionado(g)}
@@ -86,22 +112,22 @@ export default function VideojuegosPage() {
 
       <HudPanel>
         <div className="px-4 py-3 border-b border-line">
-          <HudEyebrow>{generoSeleccionado} — {data?.length ?? "…"} juegos</HudEyebrow>
+          <HudEyebrow>{generoSeleccionado} — {cargando ? "…" : visibles.length} juegos</HudEyebrow>
         </div>
-        {isLoading ? (
+        {cargando ? (
           <div className="p-4 space-y-2">{[...Array(4)].map((_, i) => <Skeleton key={i} className="h-16" />)}</div>
-        ) : error ? <ErrorState error={error} onRetry={refetch} /> :
-        data?.length === 0 ? (
+        ) : error ? <ErrorState error={error} /> :
+        visibles.length === 0 ? (
           <EmptyState title={`Sin videojuegos en ${generoSeleccionado}`} description="No hay videojuegos registrados en este género." />
         ) : (
           <div className="divide-y divide-line">
-            {data?.map((vg) => (
+            {visibles.map((vg) => (
               <div key={vg.videojuegoId} className="px-4 py-3">
                 <div className="flex items-center gap-2 mb-1">
                   <Gamepad2 className="h-4 w-4 text-violet" />
                   <p className="font-semibold text-foreground">{vg.nombre}</p>
                   <span className="hud-clip-sm border border-violet/30 bg-violet/10 text-violet font-mono text-xs px-2 py-0.5 ml-auto">
-                    {generoSeleccionado}
+                    {vg.genero}
                   </span>
                 </div>
                 <TorneosPorVideojuego videojuegoId={vg.videojuegoId} nombre={vg.nombre} />

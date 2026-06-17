@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Search, Users, Flag } from "lucide-react";
+import { Search, Users, Flag, ChevronRight } from "lucide-react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -109,7 +109,10 @@ export default function EquiposPage() {
                     </p>
                   </div>
                 </div>
-                <span className="eyebrow shrink-0">{formatDate(equipo.fechaCreacion)}</span>
+                <div className="flex items-center gap-2 shrink-0">
+                  <span className="eyebrow">{formatDate(equipo.fechaCreacion)}</span>
+                  <ChevronRight className="w-4 h-4 text-muted-foreground" />
+                </div>
               </Link>
             ))}
           </div>

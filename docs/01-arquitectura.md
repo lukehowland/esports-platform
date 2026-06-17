@@ -47,6 +47,8 @@ El servicio más grande. Aloja tres sub-dominios que giran alrededor del torneo:
 ### matches (`esports_matches`) — Q16–Q19
 Dueño de las **partidas**. Partidas de un torneo en orden cronológico (Q16), historial de un equipo (Q17), partidas de un día (Q18) y enfrentamientos directos entre dos equipos (Q19). Una partida involucra dos equipos, así que al crearla escribe el historial para ambos y **publica un evento** que alimenta rankings y estadísticas.
 
+También expone un endpoint público de showcase live (`GET /api/partidas/en-vivo/destacada`) para el home: simula T1 vs Gen.G durante 30 minutos con oro, kills y objetivos. Es estado efímero de transmisión; no escribe Cassandra ni publica `MatchPlayed`, para no contaminar rankings históricos.
+
 ### ranking (`esports_ranking`) — Q7, Q22, Q23, Q24
 Servicio **puramente event-driven**. No tiene escritura pública: consume los eventos de Tournaments y Matches y mantiene read-models agregados — ranking global de equipos por torneos (Q7), por victorias (Q22), jugadores más activos (Q23) y estadísticas de un equipo por torneo (Q24). Expone solo lectura.
 

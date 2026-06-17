@@ -129,6 +129,11 @@ Como **organizador**, quiero registrar una partida entre dos equipos con su resu
 Como **fan**, quiero ver las partidas de un torneo en orden cronológico, para seguir su desarrollo.
 - *Query:* **Q16** · *Endpoint:* `GET /api/partidas/por-torneo/{torneoId}`.
 
+**HU-25A — Ver una partida destacada en vivo**
+Como **visitante**, quiero ver una partida destacada simulada con marcador, oro y objetivos en tiempo real, para entender inmediatamente que la plataforma cubre experiencia de torneo en curso.
+- *Criterios:* la partida dura 30 minutos, inicia 0-0, aumenta oro de ambos equipos y al minuto 5 registra dragon para T1.
+- *Endpoint:* `GET /api/partidas/en-vivo/destacada`.
+
 **HU-26 — Ver el historial de partidas de un equipo**
 Como **fan** o **capitán**, quiero ver todas las partidas que jugó un equipo, para analizar su desempeño.
 - *Query:* **Q17** · *Endpoint:* `GET /api/partidas/por-equipo/{equipoId}`.
@@ -212,6 +217,7 @@ Como **sistema**, quiero rechazar mutaciones sin token (`401`) o con rol/ownersh
 | HU-22 | Q20 | `GET /api/torneos/{id}/premios` | tournaments |
 | HU-23 | Q21 | `GET /api/premios/por-equipo/{id}` | tournaments |
 | HU-24 | — | `POST /api/partidas` | matches |
+| HU-25A | — | `GET /api/partidas/en-vivo/destacada` | matches |
 | HU-25 | Q16 | `GET /api/partidas/por-torneo/{id}` | matches |
 | HU-26 | Q17 | `GET /api/partidas/por-equipo/{id}` | matches |
 | HU-27 | Q18 | `GET /api/partidas/por-fecha/{dia}` | matches |

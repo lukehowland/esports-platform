@@ -174,6 +174,7 @@ Todas las lecturas Q1–Q24 son públicas/anónimas.
   ```
 
 ### Lectura
+- `GET /api/partidas/en-vivo/destacada?elapsedSeconds={0..1800}` — showcase público no histórico para el home. Simula T1 vs Gen.G durante 30 minutos, con oro, kills, torres y objetivos. No escribe Cassandra ni publica `MatchPlayed`.
 - `GET /api/partidas/por-torneo/{torneoId}` — **Q16** (cronológico). → `partidas_por_torneo`.
 - `GET /api/partidas/por-equipo/{equipoId}` — **Q17**. → `partidas_por_equipo`.
 - `GET /api/partidas/por-fecha/{dia}` — **Q18** (`dia` = `YYYY-MM-DD`). → `partidas_por_fecha`.

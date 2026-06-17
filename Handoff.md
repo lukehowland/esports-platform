@@ -1,14 +1,14 @@
-# Handoff — Esports Platform: CRUD admin completo (organizadores, videojuegos, usuarios)
+# Handoff — Esports Platform: auth/RBAC, integridad y showcase live
 
 Fecha: 2026-06-17
 Repo: `/Users/lukesito/dev/src/github.com/lukehowland/esports-platform`
-Rama de trabajo: `main` (PR #6 ya mergeado por squash; rama de feature borrada)
-Generado por: Claude
+Rama de trabajo: `codex/restrict-videogames-and-match-enrollment`
+Generado por: Claude + Codex
 
-Este handoff reemplaza al anterior (separación de superficies + browse público, PR #4, ya
-mergeado). Documenta el estado tras **completar el CRUD del workspace admin** (`/panel`):
-edición/borrado de organizadores y videojuegos con bloqueo por dependientes, lista+alta+baja
-de usuarios, KPIs reales en el overview, y los endpoints de backend que faltaban.
+Este handoff reemplaza al anterior de PR #6. Documenta el estado actual tras el merge del CRUD
+admin a `main` y la rama posterior de Codex para reforzar integridad de datos y agregar el
+showcase live del home público: videojuegos admin-only, partidas/premios solo para equipos
+inscritos, seed nuevo con Gen.G + `RIFT-LIVE26`, y endpoint efimero de partida en vivo.
 
 ---
 
@@ -53,9 +53,10 @@ ahora tiene CRUD completo y sin bugs: organizadores y videojuegos se pueden list
 y borrar (con bloqueo 409 si tienen torneos); los usuarios se listan, registran y eliminan; el
 overview muestra KPIs reales (equipos, organizadores, torneos, partidas) y un bar chart de torneos
 por juego. El backend ganó los endpoints que faltaban (PUT/DELETE de orgs y juegos en
-`tournaments`; GET/DELETE de usuarios en `auth`). Sitio público sigue read-only. Después de la
-rama `codex/restrict-videogames-and-match-enrollment`, la suite queda en 140 tests declarados:
-se agregan guardas para videojuegos admin-only y partidas/premios solo con equipos inscritos.
+`tournaments`; GET/DELETE de usuarios en `auth`). Sitio público sigue read-only, pero el home ahora
+consume un showcase visual de una partida T1 vs Gen.G simulada desde `matches`. En la rama
+`codex/restrict-videogames-and-match-enrollment`, la suite queda en 143 tests declarados y pasando:
+guardas para videojuegos admin-only, partidas/premios solo con equipos inscritos y showcase live.
 
 ---
 
@@ -64,34 +65,39 @@ se agregan guardas para videojuegos admin-only y partidas/premios solo con equip
 Última verificación antes de este handoff:
 
 ```text
-git log --oneline -n 6 (main, == origin/main):
+git branch --show-current:
+codex/restrict-videogames-and-match-enrollment
+
+git log --oneline -n 6 (base main ya mergeado con PR #6):
+1cefc5c test: add clean integration test runner
+bf02d08 docs: update authorization and handoff context
+6c546b4 fix(frontend): remove organizer game catalog access
+a5db54c fix(auth): enforce tournament participant rules
 1cffff3 feat(admin): complete CRUD for organizers, games and users (#6)
 c90593e docs(handoff): update for public/private surfaces and browse views (#5)
-592b32f refactor(frontend): separate public/private surfaces and add default browse views (#4)
-5f71b12 Merge pull request #3 from lukehowland/fix/frontend-audit
-39eb58e docs(handoff): document frontend redesign and audit state
-1858ca8 fix(frontend): query players by ISO-2 country code (Q2)
 
-git status: ## main (limpio salvo este Handoff.md sin commitear)
-main sincronizada con origin/main (fast-forward c90593e..1cffff3 aplicado esta sesión).
+Verificacion ejecutada en esta rama:
+docker compose build matches seeder frontend tests
+./scripts/test-clean.sh
 
-docker compose ps --all: NO verificado en esta sesión de cierre (stack no levantado acá).
-  Estado esperado tras `up --build`: todos healthy, seeder Exited (0).
+Resultado de tests:
+Total tests: 143
+Passed: 143
 
-Tests de integración: 138/138 pasando — documentado en el commit `1cffff3` y verificado en la
-  sesión del PR #6 (auditoría completa del panel admin en navegador + suite). NO re-ejecutados
-  en esta sesión. El conteo de declaraciones [Fact]/[Theory] suma exactamente 138:
-    TeamsTests 20 · AuthTests 25 · AdminCrudTests 16 · RankingTests 17 ·
-    TournamentsTests 27 · MatchesTests 17 · ErrorTests 16
+Al terminar `./scripts/test-clean.sh`, el script restauró el stack demo limpio:
+frontend Started, seeder Exited (0), servicios reconstruidos desde cero.
 
-Rama posterior de Codex (`codex/restrict-videogames-and-match-enrollment`):
-  conteo declarado esperado: 140 tests. Añade 2 casos de integridad:
-    - premio a equipo no inscrito => 409
-    - partida entre equipos no inscritos => 409
+Casos nuevos clave:
+- premio a equipo no inscrito => 409
+- partida entre equipos no inscritos => 409
+- organizador/fan no pueden crear videojuegos => 403
+- `GET /api/partidas/en-vivo/destacada?elapsedSeconds=0` => T1 vs Gen.G 0-0
+- `GET /api/partidas/en-vivo/destacada?elapsedSeconds=300` => dragon de T1
+- `RIFT-LIVE26` tiene T1 y Gen.G inscritos, pero no partidas historicas ni premios
 ```
 
-> Nota: esta sesión no hizo `down -v`, así que los UUID del seeder NO se regeneraron. Tras un
-> cold-boot (`down -v` + `up`) los IDs cambian — pedirlos a la API, no hardcodear.
+> Nota: `./scripts/test-clean.sh` hace `down -v`, corre la suite y vuelve a levantar una demo limpia.
+> Los UUID del seeder cambian en cada cold-boot; pedirlos a la API, no hardcodear.
 
 ---
 
@@ -128,14 +134,14 @@ las rutas 401/403/404/409; `GatewayFixture.cs` ganó helpers de auth admin.
 
 ## Dataset del seeder (crítico)
 
-Conteos (del handoff anterior, sin cambios de datos en PR #6):
+Conteos esperados tras agregar Gen.G y `RIFT-LIVE26`:
 
 ```text
-Equipos: 40
-Jugadores (suma de integrantes): 197
+Equipos: 41
+Jugadores (suma de integrantes): 202
 Videojuegos: 5
 Organizadores: 7
-Torneos: 12
+Torneos: 13
 ```
 
 Videojuegos y su género (confirmado en /videojuegos):
@@ -151,6 +157,11 @@ Rocket League     → SPORTS
 Hechos no obvios (siguen vigentes):
 - **País se guarda como ISO-2** (`KR`, `US`, `BR`, `UA`, `CN`, `DE`, `FR`, `DK`…). Q2 espera el código.
 - **T1 tiene exactamente 3 jugadores explícitos**: Faker (MID), Gumayusi (ADC), Zeus (TOP).
+- **Gen.G existe como equipo LoL (`GEN`)** para el showcase live del home: Kiin, Canyon, Chovy,
+  Ruler y Duro.
+- **RIFT-LIVE26** es un torneo showcase de Riot Games con T1 y Gen.G inscritos. No genera partidas
+  históricas ni premios automaticos; la partida en vivo se expone por `matches` como estado
+  efimero (`GET /api/partidas/en-vivo/destacada`) para no alterar rankings/counters.
 - **UUID se regeneran en cada cold-boot** (`down -v`). No hardcodear IDs.
 - Organizadores (nombre exacto en Cassandra): `LoL Esports`, `PGL`, `Riot Games`,
   `BLAST Premier`, `VALORANT Champions Tour`, `ESL FACEIT Group`, `UNIVALLE Esports`.
@@ -281,16 +292,16 @@ PR #6 mergeado por **squash**; la rama de feature fue borrada. `main` local qued
 
 ```bash
 cd /Users/lukesito/dev/src/github.com/lukehowland/esports-platform
-git status --short --branch          # esperado: ## main, limpio (este handoff puede estar sin commitear)
-git log --oneline --decorate -n 8    # HEAD debe incluir 1cffff3 (PR #6)
+git status --short --branch          # esperado: rama codex/restrict-videogames-and-match-enrollment
+git log --oneline --decorate -n 8    # HEAD debe incluir 1cffff3 y commits de integridad
 docker compose up --build -d
 docker compose ps --all              # todos healthy, seeder Exited (0)
 docker compose logs --tail=30 seeder
 ```
 
 Estado deseado al retomar:
-- Rama `main`, sincronizada con `origin/main` en `1cffff3`.
+- Rama `codex/restrict-videogames-and-match-enrollment`, basada en `main` con PR #6 mergeado.
 - Stack arriba y healthy, seeder `Exited (0)`.
-- Frontend en `http://localhost:3000`: público read-only con vistas "Todos"/"Recientes";
-  workspace admin (`/panel`) con CRUD completo de organizadores/videojuegos/usuarios.
-- Backend auth/RBAC listo y testeado (138/138 en PR #6; 140 declaraciones tras la rama de integridad).
+- Frontend en `http://localhost:3000`: público read-only con vistas "Todos"/"Recientes" y showcase
+  live T1 vs Gen.G; workspace admin (`/panel`) con CRUD completo de organizadores/videojuegos/usuarios.
+- Backend auth/RBAC listo y testeado; suite limpia `143/143` pasando con `./scripts/test-clean.sh`.

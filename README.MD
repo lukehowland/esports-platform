@@ -80,6 +80,7 @@ GET  /api/torneos/por-fecha                          Q12
 GET  /api/torneos/{id}/equipos                       Q13
 GET  /api/torneos/por-equipo/{equipoId}              Q14
 GET  /api/torneos/por-codigo/{codigo}                Q15
+GET  /api/partidas/en-vivo/destacada                 Showcase live
 GET  /api/partidas/por-torneo/{torneoId}             Q16
 GET  /api/partidas/por-equipo/{equipoId}             Q17
 GET  /api/partidas/por-fecha/YYYY-MM-DD              Q18
@@ -93,7 +94,7 @@ GET  /api/stats/equipo/{equipoId}/torneo/{torneoId}  Q24
 
 ## Tests de integración
 
-El proyecto incluye 140 tests de integración que verifican Q1–Q24, casos de error y autorización por rol/ownership a través del gateway.
+El proyecto incluye 143 tests de integración que verifican Q1–Q24, casos de error, autorización por rol/ownership y el showcase live a través del gateway.
 
 **Comando recomendado:** usar el runner limpio. Este comando baja el stack, corre tests contra una base recien sembrada y al terminar vuelve a levantar el stack demo limpio para que el frontend muestre solo datos del seeder.
 
@@ -108,6 +109,7 @@ Los tests cubren:
 - Casos de error: 404, 400, cuerpos inválidos, GUIDs inexistentes, métodos HTTP incorrectos
 - Auth: login, `/api/auth/me`, lecturas públicas, `401` sin token y `403` por rol/ownership incorrecto
 - Invariantes: orden descendente en rankings, bidireccionalidad en Q19, suma `victorias + derrotas = partidas_jugadas`
+- Showcase live: T1 vs Gen.G arranca 0-0, dura 30 minutos y al minuto 5 incluye dragon de T1
 
 ## Comandos útiles
 

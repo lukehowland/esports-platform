@@ -22,12 +22,17 @@ public class TeamsClient
         return JsonSerializer.Deserialize<EquipoDto>(json, _json);
     }
 
-    public async Task<IReadOnlyList<Guid>> ObtenerJugadorIdsAsync(Guid equipoId)
+    public async Task<IReadOnlyList<IntegranteDto>> ObtenerJugadoresAsync(Guid equipoId)
     {
         var response = await _http.GetAsync($"/api/equipos/{equipoId}/integrantes");
         response.EnsureSuccessStatusCode();
         var json = await response.Content.ReadAsStringAsync();
-        var integrantes = JsonSerializer.Deserialize<List<IntegranteDto>>(json, _json) ?? [];
+        return JsonSerializer.Deserialize<List<IntegranteDto>>(json, _json) ?? [];
+    }
+
+    public async Task<IReadOnlyList<Guid>> ObtenerJugadorIdsAsync(Guid equipoId)
+    {
+        var integrantes = await ObtenerJugadoresAsync(equipoId);
         return integrantes.Select(i => i.JugadorId).ToList();
     }
 }

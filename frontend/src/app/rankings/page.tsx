@@ -163,7 +163,7 @@ function RankingJugadoresTab() {
           <TableHeader>
             <TableRow>
               <TableHead className="w-12">#</TableHead>
-              <TableHead>Jugador (ID)</TableHead>
+              <TableHead>Jugador</TableHead>
               <TableHead className="text-right">Torneos</TableHead>
             </TableRow>
           </TableHeader>
@@ -171,7 +171,12 @@ function RankingJugadoresTab() {
             {data?.map((r, i) => (
               <TableRow key={r.jugadorId}>
                 <TableCell><RankingPosition position={i + 1} /></TableCell>
-                <TableCell className="font-mono text-xs text-muted-foreground">{shortId(r.jugadorId)}</TableCell>
+                <TableCell>
+                  {r.nombreJugador
+                    ? <span className="font-medium">{r.nombreJugador}</span>
+                    : <span className="font-mono text-xs text-muted-foreground" title={r.jugadorId}>{shortId(r.jugadorId)}</span>
+                  }
+                </TableCell>
                 <TableCell className="text-right font-mono font-semibold text-primary">{r.totalTorneos.toString()}</TableCell>
               </TableRow>
             ))}
@@ -185,9 +190,12 @@ function RankingJugadoresTab() {
 export default function RankingsPage() {
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold text-foreground flex items-center gap-2">
-        <BarChart3 className="h-6 w-6 text-gold" /> Rankings
-      </h1>
+      <div>
+        <p className="eyebrow text-violet mb-1">▰▰ estadísticas</p>
+        <h1 className="text-3xl font-display font-bold tracking-wide flex items-center gap-3">
+          <BarChart3 className="w-7 h-7 text-gold" /> Rankings
+        </h1>
+      </div>
 
       <Tabs defaultValue="equipos">
         <TabsList>

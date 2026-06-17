@@ -69,9 +69,11 @@ function BuscarNickname() {
   );
 }
 
+const PAISES_POPULARES = ["Korea", "USA", "Brazil", "China", "Germany", "Argentina", "Colombia", "France"];
+
 function BuscarPorPais() {
   const [input, setInput] = useState("");
-  const [query, setQuery] = useState("");
+  const [query, setQuery] = useState("Korea");
 
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: ["jugadores", "pais", query],
@@ -79,20 +81,33 @@ function BuscarPorPais() {
     enabled: !!query,
   });
 
-  const buscar = () => setQuery(input.trim());
+  const buscar = (pais?: string) => setQuery((pais ?? input).trim());
 
   return (
     <div className="space-y-4">
-      <div className="flex gap-2 max-w-sm">
-        <Input
-          placeholder="País (ej: Bolivia, Korea…)"
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && buscar()}
-        />
-        <Button variant="outline" size="icon" onClick={buscar}>
-          <Search className="h-4 w-4" />
-        </Button>
+      <div className="space-y-2">
+        <div className="flex gap-2 max-w-sm">
+          <Input
+            placeholder="País (ej: Bolivia, Korea…)"
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && buscar()}
+          />
+          <Button variant="outline" size="icon" onClick={() => buscar()}>
+            <Search className="h-4 w-4" />
+          </Button>
+        </div>
+        <div className="flex flex-wrap gap-1.5">
+          {PAISES_POPULARES.map((p) => (
+            <button
+              key={p}
+              onClick={() => { setInput(p); buscar(p); }}
+              className={`eyebrow px-2 py-0.5 rounded hud-clip-sm border text-xs transition-colors ${query === p ? "border-violet/60 bg-violet/15 text-violet" : "border-line bg-elevated text-muted-foreground hover:text-foreground hover:border-violet/30"}`}
+            >
+              {p}
+            </button>
+          ))}
+        </div>
       </div>
       {query && (
         isLoading ? (
@@ -127,9 +142,12 @@ function BuscarPorPais() {
 export default function JugadoresPage() {
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold text-foreground flex items-center gap-2">
-        <User className="h-6 w-6 text-primary" /> Jugadores
-      </h1>
+      <div>
+        <p className="eyebrow text-violet mb-1">▰▰ roster</p>
+        <h1 className="text-3xl font-display font-bold tracking-wide flex items-center gap-3">
+          <User className="w-7 h-7 text-violet" /> Jugadores
+        </h1>
+      </div>
 
       <Tabs defaultValue="nickname">
         <TabsList>

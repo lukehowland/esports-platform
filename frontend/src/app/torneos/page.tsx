@@ -8,16 +8,15 @@ import { z } from "zod";
 import { Trophy, Plus, Search } from "lucide-react";
 import { toast } from "sonner";
 import Link from "next/link";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import { EmptyState } from "@/components/empty-state";
 import { ErrorState } from "@/components/error-state";
+import { HudPanel, HudEyebrow } from "@/components/hud-panel";
 import { getTorneosPorFecha, getTorneoPorCodigo, crearTorneo, getOrganizadores, getVideojuegosPorGenero } from "@/lib/api/torneos";
 import { useAuth } from "@/lib/auth/context";
 import { isOrganizador } from "@/lib/auth/types";
@@ -156,9 +155,12 @@ export default function TorneosPage() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between gap-4 flex-wrap">
-        <h1 className="text-2xl font-bold text-foreground flex items-center gap-2">
-          <Trophy className="h-6 w-6 text-warning" /> Torneos
-        </h1>
+        <div>
+          <p className="eyebrow text-lime mb-1">▰▰ competencia</p>
+          <h1 className="text-3xl font-display font-bold tracking-wide flex items-center gap-3">
+            <Trophy className="w-7 h-7 text-lime" /> Torneos
+          </h1>
+        </div>
         {esOrg && <CrearTorneoDialog organizadorIdPorDefecto={isOrganizador(identidad) ? identidad.organizadorId : undefined} />}
       </div>
 
@@ -180,53 +182,47 @@ export default function TorneosPage() {
         {codigoBuscado && (
           buscandoCodigo ? <Skeleton className="h-16 w-full max-w-sm" /> :
           errorCodigo instanceof AE && errorCodigo.status === 404 ? (
-            <p className="text-sm text-muted-foreground">No se encontró el torneo con código <span className="font-mono text-primary">{codigoBuscado}</span>.</p>
+            <p className="text-sm text-muted-foreground">No se encontró el torneo con código <span className="font-mono text-lime">{codigoBuscado}</span>.</p>
           ) : torneoPorCodigo ? (
             <Link href={`/torneos/${torneoPorCodigo.torneoId}`}>
-              <Card className="max-w-sm hover:border-primary/40 transition-colors cursor-pointer">
-                <CardHeader className="py-3">
-                  <div className="flex items-center gap-2">
-                    <Trophy className="h-4 w-4 text-warning" />
-                    <CardTitle className="text-sm">{torneoPorCodigo.nombre}</CardTitle>
-                    <Badge variant="secondary" className="font-mono ml-auto">{codigoBuscado}</Badge>
+              <HudPanel className="max-w-sm p-4 hover:border-lime/50 transition-colors cursor-pointer">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="font-semibold text-foreground">{torneoPorCodigo.nombre}</p>
+                    <p className="eyebrow mt-0.5">{formatDate(torneoPorCodigo.fechaInicio)}</p>
                   </div>
-                  <p className="text-xs text-muted-foreground">{formatDate(torneoPorCodigo.fechaInicio)}</p>
-                </CardHeader>
-              </Card>
+                  <span className="hud-clip-sm border border-lime/30 bg-lime/10 text-lime font-mono text-xs px-2 py-0.5">{codigoBuscado}</span>
+                </div>
+              </HudPanel>
             </Link>
           ) : null
         )}
       </div>
 
       {/* Lista por fecha (Q12) */}
-      {isLoading ? (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {[...Array(6)].map((_, i) => <Skeleton key={i} className="h-28" />)}
+      <HudPanel>
+        <div className="px-4 py-3 border-b border-line">
+          <HudEyebrow>{torneos?.length ?? "…"} torneos por fecha</HudEyebrow>
         </div>
-      ) : error ? <ErrorState error={error} onRetry={refetch} /> :
-      torneos?.length === 0 ? <EmptyState title="Sin torneos" description="No hay torneos registrados." /> : (
-        <div>
-          <p className="text-xs text-muted-foreground mb-3">{torneos?.length} torneos, ordenados por fecha</p>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        {isLoading ? (
+          <div className="p-4 space-y-2">{[...Array(5)].map((_, i) => <Skeleton key={i} className="h-12" />)}</div>
+        ) : error ? <ErrorState error={error} onRetry={refetch} /> :
+        torneos?.length === 0 ? <EmptyState title="Sin torneos" description="No hay torneos registrados." /> : (
+          <div className="divide-y divide-line">
             {torneos?.map((t) => (
-              <Link key={t.torneoId} href={`/torneos/${t.torneoId}`}>
-                <Card className="h-full hover:border-warning/40 transition-colors cursor-pointer group">
-                  <CardHeader className="pb-2">
-                    <div className="flex items-center gap-2">
-                      <Trophy className="h-4 w-4 text-warning shrink-0" />
-                      <CardTitle className="text-sm group-hover:text-warning transition-colors truncate">{t.nombreTorneo}</CardTitle>
-                    </div>
-                    <p className="text-xs text-muted-foreground">{t.nombreVideojuego}</p>
-                  </CardHeader>
-                  <CardContent>
-                    <p className="text-xs text-muted-foreground">{formatDate(t.fechaInicio)}</p>
-                  </CardContent>
-                </Card>
+              <Link key={t.torneoId} href={`/torneos/${t.torneoId}`}
+                className="flex items-center justify-between px-4 py-3 hover:bg-secondary/40 transition-colors"
+              >
+                <div>
+                  <p className="text-sm font-semibold text-foreground">{t.nombreTorneo}</p>
+                  <p className="eyebrow mt-0.5">{t.nombreVideojuego}</p>
+                </div>
+                <span className="eyebrow shrink-0">{formatDate(t.fechaInicio)}</span>
               </Link>
             ))}
           </div>
-        </div>
-      )}
+        )}
+      </HudPanel>
     </div>
   );
 }

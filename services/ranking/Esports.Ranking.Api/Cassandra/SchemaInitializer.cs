@@ -72,6 +72,13 @@ public class SchemaInitializer
                     PRIMARY KEY ((bucket), jugador_id)
                 )"));
 
+            // Q23 (Fix 2): meta de jugadores para resolver nickname (tabla plain separada; counter tables no admiten columnas no-counter)
+            await session.ExecuteAsync(new SimpleStatement(@"
+                CREATE TABLE IF NOT EXISTS ranking_jugadores_meta (
+                    jugador_id uuid PRIMARY KEY,
+                    nickname   text
+                )"));
+
             // Q24: estadísticas de un equipo en un torneo
             await session.ExecuteAsync(new SimpleStatement(@"
                 CREATE TABLE IF NOT EXISTS stats_equipo_por_torneo (

@@ -95,15 +95,13 @@ GET  /api/stats/equipo/{equipoId}/torneo/{torneoId}  Q24
 
 El proyecto incluye 140 tests de integración que verifican Q1–Q24, casos de error y autorización por rol/ownership a través del gateway.
 
-**Prerequisitos:** el stack debe estar levantado. El seeder corre automaticamente antes del frontend y antes de los tests.
+**Comando recomendado:** usar el runner limpio. Este comando baja el stack, corre tests contra una base recien sembrada y al terminar vuelve a levantar el stack demo limpio para que el frontend muestre solo datos del seeder.
 
 ```bash
-# Levantar stack completo
-docker compose up --build
-
-# Ejecutar los tests
-docker compose run --rm tests
+./scripts/test-clean.sh
 ```
+
+> Evitar `docker compose run --rm tests` sobre el stack de trabajo si despues vas a revisar el frontend manualmente. La suite crea datos temporales de QA; como Cassandra esta desnormalizada y ranking consume eventos, esos datos no se limpian fila por fila. El runner limpio resuelve esto con un reset completo antes y despues.
 
 Los tests cubren:
 - Q1–Q24: todos los endpoints de lectura con resultados esperados exactos

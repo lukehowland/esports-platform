@@ -1,6 +1,6 @@
 import { BookOpen } from "lucide-react";
 import ReactMarkdown from "react-markdown";
-import manualContent from "../../../MANUAL-USUARIO.md";
+import manualContent from "../../../../MANUAL-USUARIO.md";
 
 export default function ManualPage() {
   return (

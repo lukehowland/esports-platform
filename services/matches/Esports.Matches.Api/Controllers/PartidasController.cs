@@ -24,6 +24,15 @@ public class PartidasController : ControllerBase
     [Authorize]
     public async Task<IActionResult> Registrar([FromBody] RegistrarPartidaRequest req)
     {
+        var torneo = await _tournamentsClient.ObtenerTorneoAsync(req.TorneoId);
+        if (torneo is null)
+            return NotFound(new ProblemDetails
+            {
+                Title = "Torneo no encontrado",
+                Status = StatusCodes.Status404NotFound,
+                Detail = $"No se encontró el torneo {req.TorneoId} al registrar la partida.",
+            });
+
         if (!User.EsAdmin())
         {
             if (User.GetRol() != AuthConstants.Roles.Organizador)
@@ -32,21 +41,25 @@ public class PartidasController : ControllerBase
                     statusCode: StatusCodes.Status403Forbidden,
                     detail: "Solo organizadores o administradores pueden registrar partidas.");
 
-            var torneo = await _tournamentsClient.ObtenerTorneoAsync(req.TorneoId);
-            if (torneo is null)
-                return NotFound(new ProblemDetails
-                {
-                    Title = "Torneo no encontrado",
-                    Status = StatusCodes.Status404NotFound,
-                    Detail = $"No se encontró el torneo {req.TorneoId} al verificar autorización.",
-                });
-
             if (torneo.OrganizadorId != User.GetOrganizadorId())
                 return Problem(
                     title: "Acceso denegado",
                     statusCode: StatusCodes.Status403Forbidden,
                     detail: "Solo el organizador dueño del torneo puede registrar sus partidas.");
         }
+
+        var equiposInscritos = await _tournamentsClient.ObtenerEquipoIdsInscritosAsync(req.TorneoId);
+        if (equiposInscritos is null)
+            return Problem(
+                title: "No se pudo verificar inscripción de equipos",
+                statusCode: StatusCodes.Status503ServiceUnavailable,
+                detail: "El servicio de torneos no respondió al validar los equipos inscritos.");
+
+        if (!equiposInscritos.Contains(req.EquipoLocalId) || !equiposInscritos.Contains(req.EquipoVisitanteId))
+            return Problem(
+                title: "Equipos no inscritos en el torneo",
+                statusCode: StatusCodes.Status409Conflict,
+                detail: "Solo se pueden registrar partidas entre equipos inscritos en el torneo.");
 
         try
         {
@@ -69,6 +82,10 @@ public class PartidasController : ControllerBase
         var result = await _svc.ObtenerPorIdAsync(id);
         return result is null ? NotFound() : Ok(result);
     }
+
+    [HttpGet("en-vivo/destacada")]
+    public IActionResult EnVivoDestacada([FromQuery] int? elapsedSeconds = null)
+        => Ok(_svc.ObtenerEnVivoDestacada(elapsedSeconds));
 
     // Q16: partidas de un torneo (cronológico)
     [HttpGet("por-torneo/{torneoId:guid}")]

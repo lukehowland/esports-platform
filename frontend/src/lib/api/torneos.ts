@@ -180,7 +180,7 @@ export const editarOrganizador = (organizadorId: string, data: CrearOrganizadorD
 export const eliminarOrganizador = (organizadorId: string) =>
   fetcher<void>(`/api/organizadores/${organizadorId}`, { method: "DELETE" });
 
-// Edición / eliminación de videojuegos (admin u organizador; bloqueado si tiene torneos)
+// Edición / eliminación de videojuegos (admin; bloqueado si tiene torneos)
 export const editarVideojuego = (videojuegoId: string, data: CrearVideojuegoDto) =>
   fetcher<VideojuegoResponse>(`/api/videojuegos/${videojuegoId}`, {
     method: "PUT",

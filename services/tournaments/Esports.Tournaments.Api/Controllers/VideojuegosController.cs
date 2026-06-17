@@ -14,15 +14,9 @@ public class VideojuegosController : ControllerBase
     public VideojuegosController(IVideojuegoService svc) => _svc = svc;
 
     [HttpPost]
-    [Authorize]
+    [Authorize(Roles = AuthConstants.Roles.Admin)]
     public async Task<IActionResult> Crear([FromBody] CrearVideojuegoRequest req)
     {
-        if (!User.EsAdmin() && User.GetRol() != AuthConstants.Roles.Organizador)
-            return Problem(
-                title: "Acceso denegado",
-                statusCode: StatusCodes.Status403Forbidden,
-                detail: "Solo organizadores o administradores pueden crear videojuegos.");
-
         var result = await _svc.CrearAsync(req);
         return CreatedAtAction(nameof(ObtenerPorId), new { id = result.VideojuegoId }, result);
     }
@@ -45,11 +39,9 @@ public class VideojuegosController : ControllerBase
         => Ok(await _svc.ObtenerTorneosAsync(id));
 
     [HttpPut("{id:guid}")]
-    [Authorize]
+    [Authorize(Roles = AuthConstants.Roles.Admin)]
     public async Task<IActionResult> Editar(Guid id, [FromBody] EditarVideojuegoRequest req)
     {
-        if (!PuedeMutar()) return AccesoDenegado();
-
         var (resultado, videojuego) = await _svc.ActualizarAsync(id, req);
         return resultado switch
         {
@@ -60,11 +52,9 @@ public class VideojuegosController : ControllerBase
     }
 
     [HttpDelete("{id:guid}")]
-    [Authorize]
+    [Authorize(Roles = AuthConstants.Roles.Admin)]
     public async Task<IActionResult> Eliminar(Guid id)
     {
-        if (!PuedeMutar()) return AccesoDenegado();
-
         var resultado = await _svc.EliminarAsync(id);
         return resultado switch
         {
@@ -73,13 +63,6 @@ public class VideojuegosController : ControllerBase
             _ => ConDependencias(),
         };
     }
-
-    private bool PuedeMutar() => User.EsAdmin() || User.GetRol() == AuthConstants.Roles.Organizador;
-
-    private IActionResult AccesoDenegado() => Problem(
-        title: "Acceso denegado",
-        statusCode: StatusCodes.Status403Forbidden,
-        detail: "Solo organizadores o administradores pueden modificar videojuegos.");
 
     private IActionResult NoEncontrado(Guid id) => Problem(
         title: "Videojuego no encontrado",

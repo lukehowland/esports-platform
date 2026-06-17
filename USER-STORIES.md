@@ -8,7 +8,7 @@ Un sistema para **gestionar torneos de eSports**: organizadores crean torneos de
 
 ## Actores
 
-- **Organizador** — crea torneos, videojuegos, define premios.
+- **Organizador** — crea torneos y define premios/partidas de sus torneos.
 - **Capitán / Equipo** — registra su equipo y jugadores; inscribe el equipo en torneos.
 - **Jugador** — pertenece a un equipo; tiene nick, país, rol.
 - **Fan / Visitante** — consulta equipos, torneos, partidas, rankings, premios.
@@ -56,7 +56,7 @@ Como **fan** o **organizador**, quiero ver todos los integrantes de un equipo, p
 ## Épica 2 — Catálogos, torneos, inscripciones y premios (servicio tournaments)
 
 **HU-09 — Registrar un videojuego**
-Como **organizador**, quiero registrar un videojuego con su género, para poder crear torneos de ese juego.
+Como **admin**, quiero registrar un videojuego con su género, para mantener limpio el catálogo global disponible para torneos.
 - *Endpoint:* `POST /api/videojuegos`.
 
 **HU-10 — Ver videojuegos por género**
@@ -128,6 +128,11 @@ Como **organizador**, quiero registrar una partida entre dos equipos con su resu
 **HU-25 — Ver las partidas de un torneo (cronológico)**
 Como **fan**, quiero ver las partidas de un torneo en orden cronológico, para seguir su desarrollo.
 - *Query:* **Q16** · *Endpoint:* `GET /api/partidas/por-torneo/{torneoId}`.
+
+**HU-25A — Ver una partida destacada en vivo**
+Como **visitante**, quiero ver una partida destacada simulada con marcador, oro y objetivos en tiempo real, para entender inmediatamente que la plataforma cubre experiencia de torneo en curso.
+- *Criterios:* la partida dura 30 minutos, inicia 0-0, aumenta oro de ambos equipos y al minuto 5 registra dragon para T1. La simulación cuenta una remontada: Gen.G domina los primeros 5 minutos (0-2 en kills) y T1 da la vuelta al marcador con dragones, Heraldo, Barón y torres hasta cerrar la partida.
+- *Endpoint:* `GET /api/partidas/en-vivo/destacada`.
 
 **HU-26 — Ver el historial de partidas de un equipo**
 Como **fan** o **capitán**, quiero ver todas las partidas que jugó un equipo, para analizar su desempeño.
@@ -212,6 +217,7 @@ Como **sistema**, quiero rechazar mutaciones sin token (`401`) o con rol/ownersh
 | HU-22 | Q20 | `GET /api/torneos/{id}/premios` | tournaments |
 | HU-23 | Q21 | `GET /api/premios/por-equipo/{id}` | tournaments |
 | HU-24 | — | `POST /api/partidas` | matches |
+| HU-25A | — | `GET /api/partidas/en-vivo/destacada` | matches |
 | HU-25 | Q16 | `GET /api/partidas/por-torneo/{id}` | matches |
 | HU-26 | Q17 | `GET /api/partidas/por-equipo/{id}` | matches |
 | HU-27 | Q18 | `GET /api/partidas/por-fecha/{dia}` | matches |

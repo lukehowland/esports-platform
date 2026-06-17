@@ -47,6 +47,8 @@ El servicio más grande. Aloja tres sub-dominios que giran alrededor del torneo:
 ### matches (`esports_matches`) — Q16–Q19
 Dueño de las **partidas**. Partidas de un torneo en orden cronológico (Q16), historial de un equipo (Q17), partidas de un día (Q18) y enfrentamientos directos entre dos equipos (Q19). Una partida involucra dos equipos, así que al crearla escribe el historial para ambos y **publica un evento** que alimenta rankings y estadísticas.
 
+También expone un endpoint público de showcase live (`GET /api/partidas/en-vivo/destacada`) para el home: simula T1 vs Gen.G durante 30 minutos con oro, kills y objetivos. Es estado efímero de transmisión; no escribe Cassandra ni publica `MatchPlayed`, para no contaminar rankings históricos.
+
 ### ranking (`esports_ranking`) — Q7, Q22, Q23, Q24
 Servicio **puramente event-driven**. No tiene escritura pública: consume los eventos de Tournaments y Matches y mantiene read-models agregados — ranking global de equipos por torneos (Q7), por victorias (Q22), jugadores más activos (Q23) y estadísticas de un equipo por torneo (Q24). Expone solo lectura.
 
@@ -60,13 +62,13 @@ Cuando un servicio necesita un dato de otro **al procesar un request**, lo pide 
 
 Ejemplo concreto: al inscribir un equipo, `tournaments` necesita el `nombre_equipo` (para `equipos_por_torneo`) y la lista de `jugador_id` del roster (para armar el evento que alimenta Q23). Hace `GET http://teams:8080/api/equipos/{id}` y `GET http://teams:8080/api/equipos/{id}/integrantes`.
 
-Otro ejemplo: al registrar una partida como organizador, `matches` necesita saber quién es dueño del torneo. Hace `GET http://tournaments:8080/api/torneos/{id}` con `HttpClient` tipado y compara el `organizadorId` con el claim `organizador_id`.
+Otro ejemplo: al registrar una partida como organizador, `matches` necesita saber quién es dueño del torneo y qué equipos están inscritos. Hace `GET http://tournaments:8080/api/torneos/{id}` y `GET http://tournaments:8080/api/torneos/{id}/equipos` con `HttpClient` tipado; compara el `organizadorId` con el claim `organizador_id` y rechaza partidas entre equipos no inscritos.
 
 ### Autenticación y autorización
 El gateway no centraliza reglas de permisos; solo reenvía el header `Authorization`. El servicio `auth` emite tokens, y `teams`, `tournaments` y `matches` validan esos tokens en sus mutaciones:
 
 - `admin`: puede todo; lo usa el seeder y la suite de integración.
-- `organizador`: puede crear videojuegos y operar únicamente torneos de su `organizador_id`.
+- `organizador`: puede operar únicamente torneos de su `organizador_id`. No administra videojuegos, porque son catálogo global.
 - `capitan`: puede agregar jugadores/inscribir únicamente su `equipo_id`.
 - `fan` o anónimo: solo lectura.
 

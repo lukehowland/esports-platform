@@ -218,6 +218,16 @@ docker compose up --build
 ```
 La primera vez tarda (baja imágenes + Cassandra arranca ~1-2 min). Cuando los servicios escuchen en `:8080`, está listo. Luego: gateway en `http://localhost:8080`, Swagger en `5001`–`5005`, RabbitMQ en `http://localhost:15672`.
 
+## Cómo correr tests sin ensuciar el frontend
+
+Los tests de integración hacen mutaciones reales contra el gateway. No conviene limpiar esos datos fila por fila: Cassandra esta modelada query-first, hay tablas desnormalizadas y ranking consume eventos con counters. Para mantener el entorno manual solo con datos del seeder, usar el runner limpio:
+
+```bash
+./scripts/test-clean.sh
+```
+
+El script baja el stack, corre la suite contra una base recien sembrada y al terminar vuelve a levantar el stack demo limpio. `docker compose run --rm tests` sigue siendo util para debug puntual, pero deja datos temporales de QA en el stack actual.
+
 ## Troubleshooting
 
 - **"Cassandra unhealthy" / servicios reiniciando al inicio**: normal los primeros ~90s; Cassandra es lenta. El `start_period` lo cubre. Si persiste, subí RAM de Docker Desktop.
@@ -225,4 +235,5 @@ La primera vez tarda (baja imágenes + Cassandra arranca ~1-2 min). Cuando los s
 - **Windows: cambios de código no recargan**: confirmá `DOTNET_USE_POLLING_FILE_WATCHER=1` (ya está) y que el repo esté en ruta compartida con Docker (idealmente dentro de WSL2).
 - **Windows: scripts/Dockerfile fallan raro**: casi siempre es CRLF. Verificá `.gitattributes` commiteado; volvé a clonar o corré `git add --renormalize .`.
 - **Reset total de la base**: `docker compose down`. Cassandra no usa volumen persistente en el entorno de demo; al volver a ejecutar `docker compose up --build`, el seeder repuebla todo automaticamente.
+- **Tests dejaron datos de QA visibles en el frontend**: correr `./scripts/test-clean.sh` o hacer `docker compose down && docker compose up --build`. El reset completo es la limpieza soportada.
 - **MassTransit pide licencia / error de versión**: te coló la v9. Forzá `Version="8.*"` y `dotnet restore`.

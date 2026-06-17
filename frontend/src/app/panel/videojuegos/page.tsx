@@ -38,7 +38,7 @@ type Form = z.infer<typeof schema>;
 
 export default function PanelVideojuegosPage() {
   return (
-    <RequireRole roles={["admin", "organizador"]}>
+    <RequireRole roles={["admin"]}>
       <VideojuegosContent />
     </RequireRole>
   );

@@ -1,7 +1,8 @@
 import Link from "next/link";
-import { Trophy, Users, Swords, BarChart3, Gamepad2, ArrowRight } from "lucide-react";
+import { Trophy, Users, Swords, BarChart3, ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { HudPanel, HudEyebrow } from "@/components/hud-panel";
+import { LiveMatchShowcase } from "@/components/live-match-showcase";
 
 const DOMINIOS = [
   { href: "/equipos",   icon: Users,    label: "Equipos",   desc: "Rosters, jugadores y filtros por país.",          color: "violet" as const },
@@ -28,50 +29,15 @@ export default function HomePage() {
   return (
     <div className="space-y-12">
 
-      {/* Hero — tesis: un marcador en vivo */}
-      <section className="pt-6">
-        <p className="eyebrow text-lime mb-4 flex items-center gap-2">
-          <span className="inline-block w-1.5 h-1.5 rounded-full bg-lime animate-pulse" />
-          EN VIVO · MATCH IN PROGRESS
-        </p>
+      <section>
+        <LiveMatchShowcase />
 
-        {/* Scoreboard firma */}
-        <div className="hud-clip border border-line bg-panel overflow-hidden max-w-2xl">
-          <div className="px-4 py-2 border-b border-line bg-elevated/60 flex items-center justify-between">
-            <HudEyebrow>Copa UNIVALLE 2026 · Ronda 1</HudEyebrow>
-            <HudEyebrow className="text-lime">CSGO · FPS</HudEyebrow>
-          </div>
-          <div className="grid grid-cols-[1fr_auto_1fr]">
-            {/* Local */}
-            <div className="px-6 py-5">
-              <p className="eyebrow mb-1">LOCAL</p>
-              <p className="text-2xl font-display font-bold text-foreground">Team Nexus</p>
-              <p className="eyebrow text-muted-foreground mt-0.5">KR · Terminators</p>
-            </div>
-            {/* Score */}
-            <div className="flex flex-col items-center justify-center px-6 py-4 border-x border-line bg-elevated/40">
-              <div className="flex items-center gap-4">
-                <span className="text-5xl font-display font-bold text-lime tabular-nums">16</span>
-                <span className="text-xl text-muted-foreground font-mono">–</span>
-                <span className="text-5xl font-display font-bold text-foreground tabular-nums">9</span>
-              </div>
-              <p className="eyebrow text-lime mt-2">▰▰ VICTORIA</p>
-            </div>
-            {/* Visitante */}
-            <div className="px-6 py-5 text-right">
-              <p className="eyebrow mb-1">VISITANTE</p>
-              <p className="text-2xl font-display font-bold text-foreground">Pixel Wolves</p>
-              <p className="eyebrow text-muted-foreground mt-0.5">BR · Prowlers</p>
-            </div>
-          </div>
-        </div>
-
-        <p className="text-sm text-muted-foreground mt-4 max-w-xl">
+        <p className="mx-auto mt-5 max-w-2xl text-center text-sm text-muted-foreground">
           Plataforma de torneos eSports — microservicios .NET 10 + Apache Cassandra + RabbitMQ.
           24 queries distribuidas en 4 servicios, unificadas por un API Gateway.
         </p>
 
-        <div className="flex flex-wrap gap-3 mt-6">
+        <div className="mt-6 flex flex-wrap justify-center gap-3">
           <Button asChild size="lg">
             <Link href="/login">Ingresar <ArrowRight className="h-4 w-4 ml-1" /></Link>
           </Button>

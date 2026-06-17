@@ -80,12 +80,14 @@ Ejemplo de la regla en acción: "torneos de un equipo" (Q14) NO va a `/api/equip
 |---|---|
 | `POST /api/equipos` | `admin` |
 | `POST /api/equipos/{equipoId}/jugadores` | `admin` o `capitan` con `equipo_id == equipoId` |
-| `POST /api/videojuegos` | `admin` u `organizador` |
+| `POST /api/videojuegos` | `admin` |
+| `PUT /api/videojuegos/{videojuegoId}` | `admin`; bloquea con `409` si tiene torneos |
+| `DELETE /api/videojuegos/{videojuegoId}` | `admin`; bloquea con `409` si tiene torneos |
 | `POST /api/organizadores` | `admin` |
 | `POST /api/torneos` | `admin` u `organizador` con `organizador_id == organizadorId` del body |
 | `POST /api/torneos/{torneoId}/inscripciones` | `admin` o `capitan` con `equipo_id == equipoId` del body |
-| `POST /api/torneos/{torneoId}/premios` | `admin` u `organizador` dueño del torneo |
-| `POST /api/partidas` | `admin` u `organizador` dueño del torneo; `matches` verifica por REST contra `tournaments` |
+| `POST /api/torneos/{torneoId}/premios` | `admin` u `organizador` dueño del torneo; si hay `equipoId`, debe estar inscrito |
+| `POST /api/partidas` | `admin` u `organizador` dueño del torneo; ambos equipos deben estar inscritos |
 
 Todas las lecturas Q1–Q24 son públicas/anónimas.
 
@@ -117,7 +119,7 @@ Todas las lecturas Q1–Q24 son públicas/anónimas.
 ## tournaments — `/api/videojuegos`, `/api/organizadores`, `/api/torneos`, `/api/premios`
 
 ### Escritura
-- `POST /api/videojuegos` — crear videojuego. → `BATCH` `videojuegos` + `videojuegos_por_genero`.
+- `POST /api/videojuegos` — crear videojuego (solo `admin`). → `BATCH` `videojuegos` + `videojuegos_por_genero`.
   ```jsonc
   { "nombre": "League of Legends", "genero": "MOBA" }
   ```
@@ -137,7 +139,7 @@ Todas las lecturas Q1–Q24 son públicas/anónimas.
   ```jsonc
   { "equipoId": "uuid" }
   ```
-- `POST /api/torneos/{torneoId}/premios` — asignar premio (opcionalmente a un equipo ganador). → `BATCH` `premios_por_torneo` + `premios_por_equipo`.
+- `POST /api/torneos/{torneoId}/premios` — asignar premio (opcionalmente a un equipo ganador inscrito). → `BATCH` `premios_por_torneo` + `premios_por_equipo`.
   ```jsonc
   { "monto": 5000.00, "tipo": "Primer lugar", "equipoId": "uuid|null" }
   ```
@@ -160,7 +162,7 @@ Todas las lecturas Q1–Q24 son públicas/anónimas.
 ## matches — `/api/partidas`
 
 ### Escritura
-- `POST /api/partidas` — registrar partida. → `BATCH` `partidas` + `partidas_por_torneo` + `partidas_por_equipo` (2 filas) + `partidas_por_fecha` + `partidas_por_rivales` (2 filas), **publica `MatchPlayed`**.
+- `POST /api/partidas` — registrar partida entre dos equipos inscritos en el torneo. → `BATCH` `partidas` + `partidas_por_torneo` + `partidas_por_equipo` (2 filas) + `partidas_por_fecha` + `partidas_por_rivales` (2 filas), **publica `MatchPlayed`**.
   ```jsonc
   {
     "torneoId": "uuid", "nombreTorneo": "Copa Santa Cruz 2026",
@@ -172,6 +174,7 @@ Todas las lecturas Q1–Q24 son públicas/anónimas.
   ```
 
 ### Lectura
+- `GET /api/partidas/en-vivo/destacada?elapsedSeconds={0..1800}` — showcase público no histórico para el home. Simula T1 vs Gen.G durante 30 minutos, con oro, kills, torres y objetivos. No escribe Cassandra ni publica `MatchPlayed`.
 - `GET /api/partidas/por-torneo/{torneoId}` — **Q16** (cronológico). → `partidas_por_torneo`.
 - `GET /api/partidas/por-equipo/{equipoId}` — **Q17**. → `partidas_por_equipo`.
 - `GET /api/partidas/por-fecha/{dia}` — **Q18** (`dia` = `YYYY-MM-DD`). → `partidas_por_fecha`.

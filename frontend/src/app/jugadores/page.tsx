@@ -69,11 +69,22 @@ function BuscarNickname() {
   );
 }
 
-const PAISES_POPULARES = ["Korea", "USA", "Brazil", "China", "Germany", "Argentina", "Colombia", "France"];
+// El dato guarda país como código ISO-2 (KR, US, BR…), así que los chips
+// consultan por código aunque muestren un nombre legible.
+const PAISES_POPULARES = [
+  { code: "KR", label: "Korea" },
+  { code: "CN", label: "China" },
+  { code: "BR", label: "Brazil" },
+  { code: "US", label: "USA" },
+  { code: "DK", label: "Denmark" },
+  { code: "DE", label: "Germany" },
+  { code: "FR", label: "France" },
+  { code: "UA", label: "Ukraine" },
+];
 
 function BuscarPorPais() {
   const [input, setInput] = useState("");
-  const [query, setQuery] = useState("Korea");
+  const [query, setQuery] = useState("KR");
 
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: ["jugadores", "pais", query],
@@ -81,14 +92,14 @@ function BuscarPorPais() {
     enabled: !!query,
   });
 
-  const buscar = (pais?: string) => setQuery((pais ?? input).trim());
+  const buscar = (pais?: string) => setQuery((pais ?? input).trim().toUpperCase());
 
   return (
     <div className="space-y-4">
       <div className="space-y-2">
         <div className="flex gap-2 max-w-sm">
           <Input
-            placeholder="País (ej: Bolivia, Korea…)"
+            placeholder="País ISO-2 (ej: KR, US, BR…)"
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && buscar()}
@@ -100,11 +111,11 @@ function BuscarPorPais() {
         <div className="flex flex-wrap gap-1.5">
           {PAISES_POPULARES.map((p) => (
             <button
-              key={p}
-              onClick={() => { setInput(p); buscar(p); }}
-              className={`eyebrow px-2 py-0.5 rounded hud-clip-sm border text-xs transition-colors ${query === p ? "border-violet/60 bg-violet/15 text-violet" : "border-line bg-elevated text-muted-foreground hover:text-foreground hover:border-violet/30"}`}
+              key={p.code}
+              onClick={() => { setInput(p.code); buscar(p.code); }}
+              className={`eyebrow px-2 py-0.5 rounded hud-clip-sm border text-xs transition-colors ${query === p.code ? "border-violet/60 bg-violet/15 text-violet" : "border-line bg-elevated text-muted-foreground hover:text-foreground hover:border-violet/30"}`}
             >
-              {p}
+              {p.label}
             </button>
           ))}
         </div>

@@ -10,6 +10,8 @@ public interface IOrganizadorService
     Task<OrganizadorResponse?> ObtenerPorIdAsync(Guid id);
     Task<IEnumerable<OrganizadorResponse>> ObtenerTodosAsync();
     Task<IEnumerable<TorneoResumenResponse>> ObtenerTorneosAsync(Guid organizadorId);
+    Task<MutacionResultado> ActualizarAsync(Guid id, EditarOrganizadorRequest req);
+    Task<MutacionResultado> EliminarAsync(Guid id);
 }
 
 public class OrganizadorService : IOrganizadorService
@@ -36,4 +38,30 @@ public class OrganizadorService : IOrganizadorService
 
     public Task<IEnumerable<TorneoResumenResponse>> ObtenerTorneosAsync(Guid organizadorId)
         => _repo.ObtenerTorneosAsync(organizadorId);
+
+    public async Task<MutacionResultado> ActualizarAsync(Guid id, EditarOrganizadorRequest req)
+    {
+        if (await _repo.ObtenerPorIdAsync(id) is null)
+            return MutacionResultado.NoEncontrado;
+
+        // Block-on-dependents: el nombre se copia a las tablas de torneos; renombrar con
+        // torneos asociados dejaría datos inconsistentes en otras particiones.
+        if (await _repo.TieneTorneosAsync(id))
+            return MutacionResultado.ConDependencias;
+
+        await _repo.ActualizarAsync(id, req.Nombre.Trim());
+        return MutacionResultado.Ok;
+    }
+
+    public async Task<MutacionResultado> EliminarAsync(Guid id)
+    {
+        if (await _repo.ObtenerPorIdAsync(id) is null)
+            return MutacionResultado.NoEncontrado;
+
+        if (await _repo.TieneTorneosAsync(id))
+            return MutacionResultado.ConDependencias;
+
+        await _repo.EliminarAsync(id);
+        return MutacionResultado.Ok;
+    }
 }

@@ -43,4 +43,51 @@ public class VideojuegosController : ControllerBase
     [HttpGet("{id:guid}/torneos")]
     public async Task<IActionResult> Torneos(Guid id)
         => Ok(await _svc.ObtenerTorneosAsync(id));
+
+    [HttpPut("{id:guid}")]
+    [Authorize]
+    public async Task<IActionResult> Editar(Guid id, [FromBody] EditarVideojuegoRequest req)
+    {
+        if (!PuedeMutar()) return AccesoDenegado();
+
+        var (resultado, videojuego) = await _svc.ActualizarAsync(id, req);
+        return resultado switch
+        {
+            MutacionResultado.Ok => Ok(videojuego),
+            MutacionResultado.NoEncontrado => NoEncontrado(id),
+            _ => ConDependencias(),
+        };
+    }
+
+    [HttpDelete("{id:guid}")]
+    [Authorize]
+    public async Task<IActionResult> Eliminar(Guid id)
+    {
+        if (!PuedeMutar()) return AccesoDenegado();
+
+        var resultado = await _svc.EliminarAsync(id);
+        return resultado switch
+        {
+            MutacionResultado.Ok => NoContent(),
+            MutacionResultado.NoEncontrado => NoEncontrado(id),
+            _ => ConDependencias(),
+        };
+    }
+
+    private bool PuedeMutar() => User.EsAdmin() || User.GetRol() == AuthConstants.Roles.Organizador;
+
+    private IActionResult AccesoDenegado() => Problem(
+        title: "Acceso denegado",
+        statusCode: StatusCodes.Status403Forbidden,
+        detail: "Solo organizadores o administradores pueden modificar videojuegos.");
+
+    private IActionResult NoEncontrado(Guid id) => Problem(
+        title: "Videojuego no encontrado",
+        statusCode: StatusCodes.Status404NotFound,
+        detail: $"No existe un videojuego con id {id}.");
+
+    private IActionResult ConDependencias() => Problem(
+        title: "Videojuego con torneos asociados",
+        statusCode: StatusCodes.Status409Conflict,
+        detail: "No se puede editar ni eliminar un videojuego que tiene torneos. Eliminá primero sus torneos.");
 }

@@ -105,6 +105,36 @@ public class GatewayFixture : IAsyncLifetime
     public Task<HttpResponseMessage> AdminPost(string path, object body)
         => AuthedPost(path, body, AdminToken);
 
+    public async Task<HttpResponseMessage> AuthedPut(string path, object body, string token)
+    {
+        var req = new HttpRequestMessage(HttpMethod.Put, path)
+        {
+            Content = new StringContent(JsonSerializer.Serialize(body, JsonOpts), Encoding.UTF8, "application/json")
+        };
+        req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        return await Http.SendAsync(req);
+    }
+
+    public Task<HttpResponseMessage> AdminPut(string path, object body)
+        => AuthedPut(path, body, AdminToken);
+
+    public async Task<HttpResponseMessage> AuthedGet(string path, string token)
+    {
+        var req = new HttpRequestMessage(HttpMethod.Get, path);
+        req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        return await Http.SendAsync(req);
+    }
+
+    public async Task<HttpResponseMessage> AuthedDelete(string path, string token)
+    {
+        var req = new HttpRequestMessage(HttpMethod.Delete, path);
+        req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        return await Http.SendAsync(req);
+    }
+
+    public Task<HttpResponseMessage> AdminDelete(string path)
+        => AuthedDelete(path, AdminToken);
+
     public async Task<HttpResponseMessage> AdminPostJson(string path, string json)
     {
         var req = new HttpRequestMessage(HttpMethod.Post, path)

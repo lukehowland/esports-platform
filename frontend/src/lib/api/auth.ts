@@ -29,6 +29,14 @@ export interface RegistrarUsuarioDto {
   equipoId?: string;
 }
 
+export interface UsuarioResumenResponse {
+  username: string;
+  rol: string;
+  nombre: string;
+  organizadorId?: string;
+  equipoId?: string;
+}
+
 // ─── Endpoints ───────────────────────────────────────────────────────────────
 
 export function login(username: string, password: string): Promise<LoginResponse> {
@@ -46,5 +54,15 @@ export function registrarUsuario(dto: RegistrarUsuarioDto): Promise<void> {
   return fetcher<void>("/api/auth/register", {
     method: "POST",
     body: JSON.stringify(dto),
+  });
+}
+
+export function listarUsuarios(): Promise<UsuarioResumenResponse[]> {
+  return fetcher<UsuarioResumenResponse[]>("/api/auth/usuarios");
+}
+
+export function eliminarUsuario(username: string): Promise<void> {
+  return fetcher<void>(`/api/auth/usuarios/${encodeURIComponent(username)}`, {
+    method: "DELETE",
   });
 }

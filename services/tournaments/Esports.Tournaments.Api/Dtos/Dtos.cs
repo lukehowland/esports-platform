@@ -6,11 +6,16 @@ namespace Esports.Tournaments.Api.Dtos;
 public record CrearVideojuegoRequest(
     [Required, RegularExpression(@".*\S.*"), MaxLength(120)] string Nombre,
     [Required, RegularExpression(@".*\S.*"), MaxLength(40)] string Genero);
+public record EditarVideojuegoRequest(
+    [Required, RegularExpression(@".*\S.*"), MaxLength(120)] string Nombre,
+    [Required, RegularExpression(@".*\S.*"), MaxLength(40)] string Genero);
 public record VideojuegoResponse(Guid VideojuegoId, string Nombre, string Genero);
 public record VideojuegoPorGeneroResponse(Guid VideojuegoId, string Nombre);
 
 // Organizadores
 public record CrearOrganizadorRequest(
+    [Required, RegularExpression(@".*\S.*"), MaxLength(120)] string Nombre);
+public record EditarOrganizadorRequest(
     [Required, RegularExpression(@".*\S.*"), MaxLength(120)] string Nombre);
 public record OrganizadorResponse(Guid OrganizadorId, string Nombre);
 

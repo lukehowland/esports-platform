@@ -22,8 +22,24 @@ public record AgregarJugadorRequest(
 
 public record JugadorResponse(
     Guid JugadorId,
+    string Codigo,
     string Nickname,
     string Nombre,
     string Pais,
     string Rol,
-    Guid EquipoId);
+    Guid? EquipoId);
+
+// RF-03: una entrada del historial de equipos de un jugador (activa = FechaHasta null).
+public record MembresiaResponse(
+    Guid EquipoId,
+    string NombreEquipo,
+    string Tag,
+    string Rol,
+    DateTimeOffset FechaDesde,
+    DateTimeOffset? FechaHasta,
+    bool Activa);
+
+// RF-03: fichar/transferir un jugador a un equipo destino.
+public record AsignarJugadorRequest(
+    [Required] Guid EquipoDestinoId,
+    string? Rol);

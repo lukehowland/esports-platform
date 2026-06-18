@@ -232,4 +232,194 @@ public class TeamsTests(GatewayFixture fix, ITestOutputHelper output)
             r.StatusCode == HttpStatusCode.UnprocessableEntity,
             $"Se esperaba 400/422 pero fue {r.StatusCode}");
     }
+
+    // ─── RF-03: código de jugador (J-001) + membresías (baja → agente libre → alta) ──
+
+    private async Task<Guid> CrearEquipoAsync()
+    {
+        var tag = $"M{Guid.NewGuid():N}"[..7].ToUpperInvariant();
+        var r = await fix.AdminPost("/api/equipos", new { nombre = $"Membership {tag}", tag, pais = "CO" });
+        r.EnsureSuccessStatusCode();
+        return GatewayFixture.ParseJson(await r.Content.ReadAsStringAsync()).GetProperty("equipoId").GetGuid();
+    }
+
+    private async Task<(Guid Id, string Codigo)> CrearJugadorAsync(Guid equipoId, string rol = "FLEX")
+    {
+        var nick = $"mtest{Guid.NewGuid():N}"[..14];
+        var r = await fix.AdminPost($"/api/equipos/{equipoId}/jugadores",
+            new { nickname = nick, nombre = "Test Player", pais = "CO", rol });
+        r.EnsureSuccessStatusCode();
+        var doc = GatewayFixture.ParseJson(await r.Content.ReadAsStringAsync());
+        return (doc.GetProperty("jugadorId").GetGuid(), doc.GetProperty("codigo").GetString()!);
+    }
+
+    private async Task<List<JsonElement>> MembresiasAsync(Guid jugadorId)
+    {
+        var r = await fix.Http.GetAsync($"/api/jugadores/{jugadorId}/membresias");
+        r.EnsureSuccessStatusCode();
+        return GatewayFixture.ParseJson(await r.Content.ReadAsStringAsync()).EnumerateArray().ToList();
+    }
+
+    private async Task<List<Guid>> IntegrantesAsync(Guid equipoId)
+    {
+        var r = await fix.Http.GetAsync($"/api/equipos/{equipoId}/integrantes");
+        r.EnsureSuccessStatusCode();
+        return GatewayFixture.ParseJson(await r.Content.ReadAsStringAsync())
+            .EnumerateArray().Select(e => e.GetProperty("jugadorId").GetGuid()).ToList();
+    }
+
+    // Verifica el cache denormalizado del equipo activo en jugadores (por id) y jugadores_por_nickname.
+    private async Task AssertEquipoActivoAsync(Guid jugadorId, Guid equipoEsperado)
+    {
+        var byId = GatewayFixture.ParseJson(await (await fix.Http.GetAsync($"/api/jugadores/{jugadorId}")).Content.ReadAsStringAsync());
+        Assert.Equal(equipoEsperado, byId.GetProperty("equipoId").GetGuid());
+
+        var nick = byId.GetProperty("nickname").GetString();
+        var byNick = GatewayFixture.ParseJson(await (await fix.Http.GetAsync($"/api/jugadores/por-nickname/{nick}")).Content.ReadAsStringAsync());
+        Assert.Equal(equipoEsperado, byNick.GetProperty("equipoId").GetGuid());
+    }
+
+    [Fact]
+    public async Task RF03_AltaJugador_AsignaCodigoConFormatoJ()
+    {
+        var equipo = await CrearEquipoAsync();
+        var (_, codigo) = await CrearJugadorAsync(equipo);
+        Assert.Matches(@"^J-\d+$", codigo);
+    }
+
+    [Fact]
+    public async Task RF03_PorCodigo_DevuelveElJugador_YInexistente404()
+    {
+        var equipo = await CrearEquipoAsync();
+        var (id, codigo) = await CrearJugadorAsync(equipo);
+
+        var r = await fix.Http.GetAsync($"/api/jugadores/por-codigo/{codigo}");
+        Assert.Equal(HttpStatusCode.OK, r.StatusCode);
+        Assert.Equal(id, GatewayFixture.ParseJson(await r.Content.ReadAsStringAsync()).GetProperty("jugadorId").GetGuid());
+
+        var r404 = await fix.Http.GetAsync("/api/jugadores/por-codigo/J-99999999");
+        Assert.Equal(HttpStatusCode.NotFound, r404.StatusCode);
+    }
+
+    [Fact]
+    public async Task RF03_AltaCreaMembresiaActiva()
+    {
+        var equipo = await CrearEquipoAsync();
+        var (id, _) = await CrearJugadorAsync(equipo);
+
+        var membresias = await MembresiasAsync(id);
+        Assert.Single(membresias);
+        Assert.True(membresias[0].GetProperty("activa").GetBoolean());
+        Assert.Equal(equipo, membresias[0].GetProperty("equipoId").GetGuid());
+    }
+
+    [Fact]
+    public async Task RF03_Liberar_DejaAgenteLibre_YPreservaHistorial()
+    {
+        var equipo = await CrearEquipoAsync();
+        var (id, _) = await CrearJugadorAsync(equipo);
+
+        var lib = await fix.AdminPost($"/api/jugadores/{id}/liberar", new { });
+        Assert.Equal(HttpStatusCode.NoContent, lib.StatusCode);
+
+        // Sale del roster del equipo
+        Assert.DoesNotContain(id, await IntegrantesAsync(equipo));
+
+        // Queda agente libre (equipoId null)
+        var jr = await fix.Http.GetAsync($"/api/jugadores/{id}");
+        var jdoc = GatewayFixture.ParseJson(await jr.Content.ReadAsStringAsync());
+        Assert.Equal(JsonValueKind.Null, jdoc.GetProperty("equipoId").ValueKind);
+
+        // El historial se preserva: la membresía sigue, ahora cerrada (no activa)
+        var membresias = await MembresiasAsync(id);
+        Assert.Single(membresias);
+        Assert.False(membresias[0].GetProperty("activa").GetBoolean());
+    }
+
+    [Fact]
+    public async Task RF03_FicharAgenteLibre_LoSumaAlRoster_YAbreMembresia()
+    {
+        var equipoA = await CrearEquipoAsync();
+        var equipoB = await CrearEquipoAsync();
+        var (id, _) = await CrearJugadorAsync(equipoA);
+
+        await fix.AdminPost($"/api/jugadores/{id}/liberar", new { });
+        var fichar = await fix.AdminPost($"/api/jugadores/{id}/asignar", new { equipoDestinoId = equipoB });
+        Assert.Equal(HttpStatusCode.NoContent, fichar.StatusCode);
+
+        Assert.Contains(id, await IntegrantesAsync(equipoB));
+        var membresias = await MembresiasAsync(id);
+        Assert.Equal(2, membresias.Count);
+        Assert.Single(membresias, m => m.GetProperty("activa").GetBoolean());
+        Assert.Equal(equipoB, membresias.Single(m => m.GetProperty("activa").GetBoolean()).GetProperty("equipoId").GetGuid());
+        await AssertEquipoActivoAsync(id, equipoB);
+    }
+
+    [Fact]
+    public async Task RF03_TraspasoAtomicoAdmin_CierraVieja_YAbreNueva()
+    {
+        var equipoA = await CrearEquipoAsync();
+        var equipoB = await CrearEquipoAsync();
+        var (id, _) = await CrearJugadorAsync(equipoA);
+
+        // Asignar (admin) un jugador con equipo activo => traspaso atómico, sin liberar antes
+        var r = await fix.AdminPost($"/api/jugadores/{id}/asignar", new { equipoDestinoId = equipoB });
+        Assert.Equal(HttpStatusCode.NoContent, r.StatusCode);
+
+        Assert.DoesNotContain(id, await IntegrantesAsync(equipoA));
+        Assert.Contains(id, await IntegrantesAsync(equipoB));
+        var membresias = await MembresiasAsync(id);
+        Assert.Equal(2, membresias.Count);
+        Assert.Single(membresias, m => m.GetProperty("activa").GetBoolean());
+        await AssertEquipoActivoAsync(id, equipoB);
+    }
+
+    [Fact]
+    public async Task RF03_AsignarAlMismoEquipo_Devuelve409()
+    {
+        var equipo = await CrearEquipoAsync();
+        var (id, _) = await CrearJugadorAsync(equipo);
+
+        var r = await fix.AdminPost($"/api/jugadores/{id}/asignar", new { equipoDestinoId = equipo });
+        Assert.Equal(HttpStatusCode.Conflict, r.StatusCode);
+    }
+
+    [Fact]
+    public async Task RF03_CapitanFichaJugadorConEquipoActivo_Devuelve409_RequiereLiberar()
+    {
+        // Jugador con equipo activo en A; capitán de FNC intenta ficharlo a FNC.
+        var equipoA = await CrearEquipoAsync();
+        var (id, _) = await CrearJugadorAsync(equipoA);
+
+        var capToken = await fix.LoginAsync("cap_fnc", "CapDemo2024");
+        var r = await fix.AuthedPost($"/api/jugadores/{id}/asignar", new { equipoDestinoId = fix.FNCId }, capToken);
+        Assert.Equal(HttpStatusCode.Conflict, r.StatusCode);
+    }
+
+    [Fact]
+    public async Task RF03_CapitanSobreEquipoAjeno_Devuelve403()
+    {
+        var equipoA = await CrearEquipoAsync();
+        var (id, _) = await CrearJugadorAsync(equipoA);
+
+        // Capitán de FNC intenta fichar hacia un equipo que no es el suyo
+        var capToken = await fix.LoginAsync("cap_fnc", "CapDemo2024");
+        var r = await fix.AuthedPost($"/api/jugadores/{id}/asignar", new { equipoDestinoId = equipoA }, capToken);
+        Assert.Equal(HttpStatusCode.Forbidden, r.StatusCode);
+    }
+
+    [Fact]
+    public async Task RF03_LiberarSinToken_Devuelve401_YFan403()
+    {
+        var equipo = await CrearEquipoAsync();
+        var (id, _) = await CrearJugadorAsync(equipo);
+
+        var sin = await fix.Http.PostAsync($"/api/jugadores/{id}/liberar",
+            new StringContent("{}", Encoding.UTF8, "application/json"));
+        Assert.Equal(HttpStatusCode.Unauthorized, sin.StatusCode);
+
+        var fanToken = await fix.LoginAsync("fan_demo", "FanDemo2024");
+        var fan = await fix.AuthedPost($"/api/jugadores/{id}/liberar", new { }, fanToken);
+        Assert.Equal(HttpStatusCode.Forbidden, fan.StatusCode);
+    }
 }

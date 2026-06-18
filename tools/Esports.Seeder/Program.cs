@@ -51,6 +51,9 @@ internal static class SeederApp
                 await EnsureJugadorAsync(http, createdTeam.EquipoId, player);
         }
 
+        // RF-03: traspaso de ejemplo para que el historial de equipos no esté vacío en la demo.
+        await SeedDemoTransferAsync(http, teams);
+
         var tournaments = new Dictionary<string, TorneoResponse>();
         foreach (var tournament in SeedData.Tournaments)
         {
@@ -257,6 +260,39 @@ internal static class SeederApp
             rol = seed.Rol.Trim()
         });
         Console.WriteLine($"  Jugador creado: {created.Nickname}");
+    }
+
+    // RF-03: siembra un traspaso real (KC -> FNC, ambos LoL) para que el historial de
+    // equipos del jugador tenga dos entradas en la demo. No toca rosters fijados por tests.
+    private static async Task SeedDemoTransferAsync(HttpClient http, IReadOnlyDictionary<string, EquipoResponse> teams)
+    {
+        if (!teams.TryGetValue("LOL_KC", out var origen) || !teams.TryGetValue("LOL_FNC", out var destino))
+            return;
+
+        const string nick = "Wanderer";
+        var jugador = await GetOptionalAsync<JugadorResponse>(http, $"/api/jugadores/por-nickname/{Uri.EscapeDataString(nick)}");
+        if (jugador is null)
+        {
+            jugador = await PostAsync<JugadorResponse>(http, $"/api/equipos/{origen.EquipoId}/jugadores", new
+            {
+                nickname = nick,
+                nombre = "Alex Wanderer",
+                pais = "FR",
+                rol = "JUNGLE"
+            });
+            Console.WriteLine($"  Jugador demo de traspaso creado: {jugador.Nickname} ({jugador.Codigo}) en {origen.Tag}");
+        }
+
+        var membresias = await GetOrEmptyAsync<MembresiaResponse>(http, $"/api/jugadores/{jugador.JugadorId}/membresias");
+        if (membresias.Count >= 2)
+        {
+            Console.WriteLine("  Traspaso demo ya aplicado (omitido).");
+            return;
+        }
+
+        // Admin: asignar a un jugador con equipo activo = traspaso atómico (baja + alta).
+        await PostNoBodyAsync(http, $"/api/jugadores/{jugador.JugadorId}/asignar", new { equipoDestinoId = destino.EquipoId });
+        Console.WriteLine($"  Traspaso demo aplicado: {jugador.Nickname} {origen.Tag} -> {destino.Tag}");
     }
 
     private static async Task<TorneoResponse> EnsureTorneoAsync(
@@ -698,7 +734,8 @@ internal sealed record VideojuegoResponse(Guid VideojuegoId, string Nombre, stri
 internal sealed record VideojuegoPorGeneroResponse(Guid VideojuegoId, string Nombre);
 internal sealed record OrganizadorResponse(Guid OrganizadorId, string Nombre);
 internal sealed record EquipoResponse(Guid EquipoId, string Nombre, string Tag, string Pais, DateTimeOffset FechaCreacion);
-internal sealed record JugadorResponse(Guid JugadorId, string Nickname, string Nombre, string Pais, string Rol, Guid EquipoId);
+internal sealed record JugadorResponse(Guid JugadorId, string Codigo, string Nickname, string Nombre, string Pais, string Rol, Guid? EquipoId);
+internal sealed record MembresiaResponse(Guid EquipoId, string NombreEquipo, string Tag, string Rol, DateTimeOffset FechaDesde, DateTimeOffset? FechaHasta, bool Activa);
 internal sealed record TorneoResponse(Guid TorneoId, string Nombre, string Codigo, Guid VideojuegoId, string NombreVideojuego, Guid OrganizadorId, string NombreOrganizador, DateTimeOffset FechaInicio);
 internal sealed record TorneoPorCodigoResponse(Guid TorneoId, string Nombre, DateTimeOffset FechaInicio);
 internal sealed record TorneoResumenResponse(Guid TorneoId, string NombreTorneo, string NombreVideojuego, DateTimeOffset FechaInicio);

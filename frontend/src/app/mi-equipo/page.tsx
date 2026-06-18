@@ -148,15 +148,22 @@ export default function MiEquipoPage() {
             {integrantes && integrantes.length > 0 ? (
               <div className="divide-y divide-line">
                 {integrantes.map((j) => (
-                  <div key={j.jugadorId} className="flex items-center justify-between px-4 py-3">
-                    <div>
-                      <p className="text-sm font-semibold text-foreground">{j.nickname}</p>
-                      <p className="eyebrow mt-0.5">{j.nombre} · {j.pais}</p>
+                  <a
+                    key={j.jugadorId}
+                    href={`/jugadores/${j.jugadorId}`}
+                    className="flex items-center justify-between px-4 py-3 hover:bg-secondary/40 transition-colors"
+                  >
+                    <div className="flex items-center gap-3 min-w-0">
+                      <span className="hud-clip-sm border border-gold/30 bg-gold/10 text-gold text-[10px] font-mono px-1.5 py-0.5 shrink-0">{j.codigo}</span>
+                      <div className="min-w-0">
+                        <p className="text-sm font-semibold text-foreground truncate">{j.nickname}</p>
+                        <p className="eyebrow mt-0.5">{j.nombre} · {j.pais}</p>
+                      </div>
                     </div>
-                    <span className="hud-clip-sm border border-violet/30 bg-violet/10 text-violet text-xs font-mono px-2 py-0.5">
+                    <span className="hud-clip-sm border border-violet/30 bg-violet/10 text-violet text-xs font-mono px-2 py-0.5 shrink-0">
                       {j.rol}
                     </span>
-                  </div>
+                  </a>
                 ))}
               </div>
             ) : (

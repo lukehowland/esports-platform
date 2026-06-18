@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useParams } from "next/navigation";
+import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 import { RefreshCw } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -162,6 +163,7 @@ export default function EquipoDetallePage() {
             <Table>
               <TableHeader>
                 <TableRow>
+                  <TableHead>Código</TableHead>
                   <TableHead>Nickname</TableHead>
                   <TableHead>Nombre</TableHead>
                   <TableHead>País</TableHead>
@@ -171,7 +173,10 @@ export default function EquipoDetallePage() {
               <TableBody>
                 {integrantes?.map((j) => (
                   <TableRow key={j.jugadorId}>
-                    <TableCell className="font-mono text-primary">{j.nickname}</TableCell>
+                    <TableCell className="font-mono text-gold text-xs">{j.codigo}</TableCell>
+                    <TableCell className="font-mono text-primary">
+                      <Link href={`/jugadores/${j.jugadorId}`} className="hover:underline">{j.nickname}</Link>
+                    </TableCell>
                     <TableCell>{j.nombre}</TableCell>
                     <TableCell>{j.pais}</TableCell>
                     <TableCell><Badge variant="muted">{j.rol}</Badge></TableCell>

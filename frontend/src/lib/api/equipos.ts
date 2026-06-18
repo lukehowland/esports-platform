@@ -10,11 +10,23 @@ export interface EquipoResponse {
 
 export interface JugadorResponse {
   jugadorId: string;
+  codigo: string;
   nickname: string;
   nombre: string;
   pais: string;
   rol: string;
+  equipoId: string | null;
+}
+
+// RF-03: una entrada del historial de equipos del jugador (activa = sin fechaHasta).
+export interface MembresiaResponse {
   equipoId: string;
+  nombreEquipo: string;
+  tag: string;
+  rol: string;
+  fechaDesde: string;
+  fechaHasta: string | null;
+  activa: boolean;
 }
 
 export interface CrearEquipoDto {
@@ -52,6 +64,23 @@ export const getJugadorPorNickname = (nickname: string) =>
 
 export const getJugadoresPorPais = (pais: string) =>
   fetcher<JugadorResponse[]>(`/api/jugadores/por-pais/${encodeURIComponent(pais)}`);
+
+// RF-03: jugador por id / código + historial de equipos
+export const getJugador = (id: string) =>
+  fetcher<JugadorResponse>(`/api/jugadores/${id}`);
+
+export const getJugadorPorCodigo = (codigo: string) =>
+  fetcher<JugadorResponse>(`/api/jugadores/por-codigo/${encodeURIComponent(codigo)}`);
+
+export const getMembresiasJugador = (id: string) =>
+  fetcher<MembresiaResponse[]>(`/api/jugadores/${id}/membresias`);
+
+// RF-03: liberar (baja a agente libre) y asignar/fichar/transferir a un equipo
+export const liberarJugador = (id: string) =>
+  fetcher<void>(`/api/jugadores/${id}/liberar`, { method: "POST" });
+
+export const asignarJugador = (id: string, data: { equipoDestinoId: string; rol?: string }) =>
+  fetcher<void>(`/api/jugadores/${id}/asignar`, { method: "POST", body: JSON.stringify(data) });
 
 export const crearEquipo = (data: CrearEquipoDto) =>
   fetcher<EquipoResponse>("/api/equipos", { method: "POST", body: JSON.stringify(data) });

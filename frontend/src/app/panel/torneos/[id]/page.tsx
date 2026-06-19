@@ -1,13 +1,13 @@
 "use client";
 
 import { useState } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { Trophy, Plus, RefreshCw, ArrowLeft, Lock } from "lucide-react";
+import { Trophy, Plus, RefreshCw, ArrowLeft, Lock, Pencil, Trash2, Loader2, CalendarRange } from "lucide-react";
 import { toast } from "sonner";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
@@ -15,7 +15,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { EmptyState } from "@/components/empty-state";
@@ -26,11 +26,12 @@ import { useAuth } from "@/lib/auth/context";
 import { isAdmin, isOrganizador } from "@/lib/auth/types";
 import {
   getTorneoPorId, getEquiposPorTorneo, getPremiosPorTorneo,
-  inscribirEquipo, asignarPremio,
+  inscribirEquipo, asignarPremio, editarTorneo, eliminarTorneo,
+  type TorneoResponse,
 } from "@/lib/api/torneos";
 import { getEquiposPorFecha } from "@/lib/api/equipos";
 import { getPartidasPorTorneo, registrarPartida } from "@/lib/api/partidas";
-import { formatDateTime, formatCurrency } from "@/lib/utils";
+import { formatDateTime, formatDate, formatCurrency } from "@/lib/utils";
 import type { ApiError } from "@/lib/api/fetcher";
 
 export default function PanelTorneoPage() {
@@ -64,15 +65,21 @@ function TorneoGestion() {
         <ArrowLeft className="w-3.5 h-3.5" /> Volver a torneos
       </Link>
 
-      <div>
-        <div className="flex items-center gap-2 mb-1">
-          <Trophy className="h-6 w-6 text-warning" />
-          <h1 className="text-2xl font-bold text-foreground">{torneo.nombre}</h1>
-          <Badge variant="secondary" className="font-mono">{torneo.codigo}</Badge>
+      <div className="flex flex-col items-start justify-between gap-3 sm:flex-row">
+        <div>
+          <div className="mb-1 flex flex-wrap items-center gap-2">
+            <Trophy className="h-6 w-6 text-warning" />
+            <h1 className="text-2xl font-bold text-foreground">{torneo.nombre}</h1>
+            <Badge variant="secondary" className="font-mono">{torneo.codigo}</Badge>
+          </div>
+          <p className="text-sm text-muted-foreground">
+            {torneo.nombreVideojuego} · {torneo.nombreOrganizador}
+          </p>
+          <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
+            <CalendarRange className="w-3.5 h-3.5" /> {formatDate(torneo.fechaInicio)} → {formatDate(torneo.fechaFin)}
+          </p>
         </div>
-        <p className="text-sm text-muted-foreground">
-          {torneo.nombreVideojuego} · {torneo.nombreOrganizador}
-        </p>
+        {esDueño && <TorneoActions torneo={torneo} />}
       </div>
 
       {esDueño ? (
@@ -203,6 +210,93 @@ function GestionContent({ torneoId, torneoNombre, esAdmin }: { torneoId: string;
   );
 }
 
+// RF-06: editar (nombre/fecha fin) y eliminar torneo. Bloqueado si tiene inscritos/premios (409).
+function TorneoActions({ torneo }: { torneo: TorneoResponse }) {
+  const router = useRouter();
+  const qc = useQueryClient();
+  const [editOpen, setEditOpen] = useState(false);
+  const [delOpen, setDelOpen] = useState(false);
+  const [nombre, setNombre] = useState(torneo.nombre);
+  const [fechaFin, setFechaFin] = useState(new Date(torneo.fechaFin).toISOString().slice(0, 16));
+
+  const abrirEdicion = () => {
+    setNombre(torneo.nombre);
+    setFechaFin(new Date(torneo.fechaFin).toISOString().slice(0, 16));
+    setEditOpen(true);
+  };
+
+  const editar = useMutation({
+    mutationFn: () => editarTorneo(torneo.torneoId, { nombre: nombre.trim(), fechaFin: new Date(fechaFin).toISOString() }),
+    onSuccess: () => {
+      toast.success("Torneo actualizado");
+      qc.invalidateQueries({ queryKey: ["torneo", torneo.torneoId] });
+      qc.invalidateQueries({ queryKey: ["torneos"] });
+      setEditOpen(false);
+    },
+    onError: (e) => toast.error(e instanceof Error ? (e as ApiError).detail ?? e.message : "No se pudo editar"),
+  });
+
+  const eliminar = useMutation({
+    mutationFn: () => eliminarTorneo(torneo.torneoId),
+    onSuccess: () => {
+      toast.success("Torneo eliminado");
+      qc.invalidateQueries({ queryKey: ["torneos"] });
+      router.push("/panel/torneos");
+    },
+    onError: (e) => toast.error(e instanceof Error ? (e as ApiError).detail ?? e.message : "No se pudo eliminar"),
+  });
+
+  return (
+    <div className="flex items-center gap-1 shrink-0">
+      <Button size="sm" variant="outline" onClick={abrirEdicion}><Pencil className="w-3.5 h-3.5" /> Editar</Button>
+      <Button size="sm" variant="outline" onClick={() => setDelOpen(true)}><Trash2 className="w-3.5 h-3.5 text-destructive" /> Eliminar</Button>
+
+      <Dialog open={editOpen} onOpenChange={setEditOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Editar torneo</DialogTitle>
+            <DialogDescription>No se puede editar si tiene equipos inscritos o premios asignados.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-1.5">
+              <Label className="eyebrow">Nombre</Label>
+              <Input value={nombre} onChange={(e) => setNombre(e.target.value)} />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="eyebrow">Fecha de fin</Label>
+              <Input type="datetime-local" value={fechaFin} onChange={(e) => setFechaFin(e.target.value)} />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditOpen(false)}>Cancelar</Button>
+            <Button disabled={editar.isPending} onClick={() => editar.mutate()}>
+              {editar.isPending && <Loader2 className="w-4 h-4 animate-spin" />} Guardar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={delOpen} onOpenChange={setDelOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Eliminar torneo</DialogTitle>
+            <DialogDescription>
+              Vas a eliminar <span className="font-semibold text-foreground">{torneo.nombre}</span>.
+              No se puede eliminar si tiene equipos inscritos o premios asignados.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDelOpen(false)}>Cancelar</Button>
+            <Button variant="destructive" disabled={eliminar.isPending} onClick={() => eliminar.mutate()}>
+              {eliminar.isPending && <Loader2 className="w-4 h-4 animate-spin" />} Eliminar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
 // Inscribir equipo — solo admin (superusuario). El organizador no inscribe: lo hace el capitán.
 function InscribirEquipoDialog({ torneoId }: { torneoId: string }) {
   const [open, setOpen] = useState(false);
@@ -285,7 +379,7 @@ function AsignarPremioDialog({ torneoId }: { torneoId: string }) {
       <DialogContent>
         <DialogHeader><DialogTitle>Asignar premio al torneo</DialogTitle></DialogHeader>
         <form onSubmit={handleSubmit((d) => mutation.mutate(d))} className="space-y-4 mt-2">
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div className="space-y-1">
               <Label>Monto (USD)</Label>
               <Input {...register("monto")} type="number" placeholder="5000" />
@@ -373,7 +467,7 @@ function RegistrarPartidaDialog({ torneoId, torneoNombre }: { torneoId: string; 
       <DialogContent>
         <DialogHeader><DialogTitle>Registrar partida en {torneoNombre}</DialogTitle></DialogHeader>
         <form onSubmit={handleSubmit((d) => mutation.mutate(d))} className="space-y-4 mt-2">
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div className="space-y-1">
               <Label>Equipo local</Label>
               <Controller control={control} name="equipoLocalId" render={({ field }) => (

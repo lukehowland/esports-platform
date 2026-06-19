@@ -64,12 +64,12 @@ export default function VideojuegosPage() {
     })),
     combine: (results) => {
       const seen = new Set<string>();
-      const juegos: { videojuegoId: string; nombre: string; genero: string }[] = [];
+      const juegos: { videojuegoId: string; nombre: string; genero: string; plataforma: string }[] = [];
       results.forEach((r, i) => {
         for (const vg of r.data ?? []) {
           if (!seen.has(vg.videojuegoId)) {
             seen.add(vg.videojuegoId);
-            juegos.push({ videojuegoId: vg.videojuegoId, nombre: vg.nombre, genero: GENEROS[i] });
+            juegos.push({ videojuegoId: vg.videojuegoId, nombre: vg.nombre, genero: GENEROS[i], plataforma: vg.plataforma });
           }
         }
       });
@@ -126,7 +126,10 @@ export default function VideojuegosPage() {
                 <div className="flex items-center gap-2 mb-1">
                   <Gamepad2 className="h-4 w-4 text-violet" />
                   <p className="font-semibold text-foreground">{vg.nombre}</p>
-                  <span className="hud-clip-sm border border-violet/30 bg-violet/10 text-violet font-mono text-xs px-2 py-0.5 ml-auto">
+                  <span className="hud-clip-sm border border-lime/30 bg-lime/10 text-lime font-mono text-xs px-2 py-0.5 ml-auto">
+                    {vg.plataforma}
+                  </span>
+                  <span className="hud-clip-sm border border-violet/30 bg-violet/10 text-violet font-mono text-xs px-2 py-0.5">
                     {vg.genero}
                   </span>
                 </div>

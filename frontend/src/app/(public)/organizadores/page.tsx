@@ -72,6 +72,7 @@ export default function OrganizadoresPage() {
                 <div className="flex items-center gap-2 mb-1">
                   <Building2 className="h-4 w-4 text-violet" />
                   <p className="font-semibold text-foreground">{org.nombre}</p>
+                  <span className="eyebrow ml-auto">{org.email}</span>
                 </div>
                 <TorneosOrganizador organizadorId={org.organizadorId} nombre={org.nombre} />
               </div>

@@ -15,6 +15,8 @@ export interface JugadorResponse {
   nombre: string;
   pais: string;
   rol: string;
+  email: string;
+  telefono: string;
   equipoId: string | null;
 }
 
@@ -35,11 +37,21 @@ export interface CrearEquipoDto {
   pais: string;
 }
 
+export type EditarEquipoDto = CrearEquipoDto;
+
 export interface AgregarJugadorDto {
   nickname: string;
   nombre: string;
   pais: string;
   rol: string;
+  email: string;
+  telefono: string;
+}
+
+export interface EditarJugadorDto {
+  nombre: string;
+  email: string;
+  telefono: string;
 }
 
 export const getEquiposPorFecha = () =>
@@ -84,6 +96,20 @@ export const asignarJugador = (id: string, data: { equipoDestinoId: string; rol?
 
 export const crearEquipo = (data: CrearEquipoDto) =>
   fetcher<EquipoResponse>("/api/equipos", { method: "POST", body: JSON.stringify(data) });
+
+// RF-02: editar / eliminar equipo (admin; bloqueado si tiene roster)
+export const editarEquipo = (equipoId: string, data: EditarEquipoDto) =>
+  fetcher<EquipoResponse>(`/api/equipos/${equipoId}`, { method: "PUT", body: JSON.stringify(data) });
+
+export const eliminarEquipo = (equipoId: string) =>
+  fetcher<void>(`/api/equipos/${equipoId}`, { method: "DELETE" });
+
+// RF-01: editar / eliminar jugador
+export const editarJugador = (jugadorId: string, data: EditarJugadorDto) =>
+  fetcher<JugadorResponse>(`/api/jugadores/${jugadorId}`, { method: "PUT", body: JSON.stringify(data) });
+
+export const eliminarJugador = (jugadorId: string) =>
+  fetcher<void>(`/api/jugadores/${jugadorId}`, { method: "DELETE" });
 
 export const agregarJugador = (equipoId: string, data: AgregarJugadorDto) =>
   fetcher<JugadorResponse>(`/api/equipos/${equipoId}/jugadores`, {

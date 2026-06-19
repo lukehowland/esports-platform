@@ -9,6 +9,7 @@ export interface TorneoResponse {
   organizadorId: string;
   nombreOrganizador: string;
   fechaInicio: string;
+  fechaFin: string;
 }
 
 export interface TorneoResumenResponse {
@@ -64,17 +65,20 @@ export interface PremioEquipoResponse {
 export interface OrganizadorResponse {
   organizadorId: string;
   nombre: string;
+  email: string;
 }
 
 export interface VideojuegoPorGeneroResponse {
   videojuegoId: string;
   nombre: string;
+  plataforma: string;
 }
 
 export interface VideojuegoResponse {
   videojuegoId: string;
   nombre: string;
   genero: string;
+  plataforma: string;
 }
 
 export interface CrearTorneoDto {
@@ -83,15 +87,23 @@ export interface CrearTorneoDto {
   videojuegoId: string;
   organizadorId: string;
   fechaInicio: string;
+  fechaFin: string;
+}
+
+export interface EditarTorneoDto {
+  nombre: string;
+  fechaFin: string;
 }
 
 export interface CrearVideojuegoDto {
   nombre: string;
   genero: string;
+  plataforma: string;
 }
 
 export interface CrearOrganizadorDto {
   nombre: string;
+  email: string;
 }
 
 export interface AsignarPremioDto {
@@ -153,6 +165,13 @@ export const crearOrganizador = (data: CrearOrganizadorDto) =>
 
 export const crearTorneo = (data: CrearTorneoDto) =>
   fetcher<TorneoResponse>("/api/torneos", { method: "POST", body: JSON.stringify(data) });
+
+// RF-06: editar / eliminar torneo (admin o dueño; bloqueado si tiene inscritos/premios)
+export const editarTorneo = (torneoId: string, data: EditarTorneoDto) =>
+  fetcher<TorneoResponse>(`/api/torneos/${torneoId}`, { method: "PUT", body: JSON.stringify(data) });
+
+export const eliminarTorneo = (torneoId: string) =>
+  fetcher<void>(`/api/torneos/${torneoId}`, { method: "DELETE" });
 
 export const inscribirEquipo = (torneoId: string, equipoId: string) =>
   fetcher<unknown>(`/api/torneos/${torneoId}/inscripciones`, {

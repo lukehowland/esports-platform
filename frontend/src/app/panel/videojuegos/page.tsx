@@ -28,11 +28,14 @@ import { ApiError } from "@/lib/api/fetcher";
 const GENEROS = ["MOBA", "FPS", "BATTLE_ROYALE", "RTS", "FIGHTING", "SPORTS", "RPG"];
 const TODOS = "TODOS";
 
-interface Juego { videojuegoId: string; nombre: string; genero: string; }
+interface Juego { videojuegoId: string; nombre: string; genero: string; plataforma: string; }
+
+const PLATAFORMAS = ["PC", "Console", "Mobile", "Cross-platform"];
 
 const schema = z.object({
   nombre: z.string().min(1, "Requerido").max(120),
   genero: z.string().min(1, "Requerido"),
+  plataforma: z.string().min(1, "Requerido"),
 });
 type Form = z.infer<typeof schema>;
 
@@ -66,7 +69,7 @@ function VideojuegosContent() {
         for (const vg of r.data ?? []) {
           if (!seen.has(vg.videojuegoId)) {
             seen.add(vg.videojuegoId);
-            juegos.push({ videojuegoId: vg.videojuegoId, nombre: vg.nombre, genero: GENEROS[i] });
+            juegos.push({ videojuegoId: vg.videojuegoId, nombre: vg.nombre, genero: GENEROS[i], plataforma: vg.plataforma });
           }
         }
       });
@@ -96,7 +99,7 @@ function VideojuegosContent() {
 
   return (
     <div className="space-y-6 max-w-2xl">
-      <div className="flex items-end justify-between gap-4">
+      <div className="flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-end">
         <div>
           <p className="eyebrow text-violet mb-1">▰▰ catálogo</p>
           <h1 className="text-3xl font-display font-bold tracking-wide flex items-center gap-3">
@@ -108,7 +111,7 @@ function VideojuegosContent() {
         </Button>
       </div>
 
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         <StatTile value={cargando ? "—" : juegos.length} label="Total videojuegos" color="violet" />
       </div>
 
@@ -143,6 +146,9 @@ function VideojuegosContent() {
                   <p className="text-sm font-semibold text-foreground truncate">{v.nombre}</p>
                   <span className="hud-clip-sm border border-lime/30 bg-lime/10 text-lime text-xs font-mono px-2 py-0.5 shrink-0">
                     {v.genero}
+                  </span>
+                  <span className="hud-clip-sm border border-violet/30 bg-violet/10 text-violet text-xs font-mono px-2 py-0.5 shrink-0">
+                    {v.plataforma}
                   </span>
                 </div>
                 <div className="flex items-center gap-1 shrink-0">
@@ -212,20 +218,23 @@ function VideojuegoModal({
 
   const { register, handleSubmit, setValue, watch, reset, formState: { errors } } = useForm<Form>({
     resolver: zodResolver(schema),
-    values: display ? { nombre: display.nombre, genero: display.genero } : { nombre: "", genero: "MOBA" },
+    values: display
+      ? { nombre: display.nombre, genero: display.genero, plataforma: display.plataforma }
+      : { nombre: "", genero: "MOBA", plataforma: "PC" },
   });
 
   const generoActual = watch("genero");
+  const plataformaActual = watch("plataforma");
 
   const guardar = useMutation({
     mutationFn: (d: Form) =>
       esEdicion
-        ? editarVideojuego(display!.videojuegoId, { nombre: d.nombre, genero: d.genero })
-        : crearVideojuego({ nombre: d.nombre, genero: d.genero }),
+        ? editarVideojuego(display!.videojuegoId, { nombre: d.nombre, genero: d.genero, plataforma: d.plataforma })
+        : crearVideojuego({ nombre: d.nombre, genero: d.genero, plataforma: d.plataforma }),
     onSuccess: () => {
       toast.success(esEdicion ? "Videojuego actualizado" : "Videojuego creado");
       setServerError(null);
-      reset({ nombre: "", genero: "MOBA" });
+      reset({ nombre: "", genero: "MOBA", plataforma: "PC" });
       onGuardado();
     },
     onError: (err) => {
@@ -233,7 +242,7 @@ function VideojuegoModal({
     },
   });
 
-  const handleClose = () => { reset({ nombre: "", genero: "MOBA" }); setServerError(null); onClose(); };
+  const handleClose = () => { reset({ nombre: "", genero: "MOBA", plataforma: "PC" }); setServerError(null); onClose(); };
 
   return (
     <Dialog open={abierto} onOpenChange={(o) => !o && handleClose()}>
@@ -265,6 +274,20 @@ function VideojuegoModal({
               </SelectContent>
             </Select>
             {errors.genero && <p className="text-xs text-destructive">{errors.genero.message}</p>}
+          </div>
+          <div className="space-y-1.5">
+            <Label className="eyebrow">Plataforma</Label>
+            <Select value={plataformaActual} onValueChange={(v) => setValue("plataforma", v, { shouldValidate: true })}>
+              <SelectTrigger>
+                <SelectValue placeholder="Seleccioná una plataforma…" />
+              </SelectTrigger>
+              <SelectContent>
+                {PLATAFORMAS.map((p) => (
+                  <SelectItem key={p} value={p}>{p}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {errors.plataforma && <p className="text-xs text-destructive">{errors.plataforma.message}</p>}
           </div>
           {serverError && (
             <div className="rounded border border-destructive/40 bg-destructive/10 px-4 py-3">

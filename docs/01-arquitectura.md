@@ -36,12 +36,17 @@ flowchart TB
 ## Los servicios y sus fronteras
 
 ### teams (`esports_teams`) — Q1–Q6
-Fuente de verdad de **jugadores y equipos**. Cubre búsqueda de jugadores por nickname (Q1) y por país (Q2), jugadores de un equipo filtrados por país (Q3), listado de equipos por fecha de creación (Q4), búsqueda de equipo por tag (Q5) e integrantes completos de un equipo (Q6). Cuando otro servicio necesita el nombre de un equipo o su roster, lo pide acá por REST.
+Fuente de verdad de **jugadores y equipos**. Cubre Q1–Q6 y los RF de gestión: jugadores con
+código, email/teléfono y membresías N:N temporales; equipos con CRUD admin. Cuando otro servicio
+necesita el nombre de un equipo o su roster, lo pide acá por REST.
 
 ### tournaments (`esports_tournaments`) — Q8–Q15, Q20, Q21
 El servicio más grande. Aloja tres sub-dominios que giran alrededor del torneo:
 - **Catálogos**: videojuegos por género (Q8) y lista de organizadores (Q10). Son entidades de referencia que solo existen en función de los torneos, por eso viven acá.
-- **Torneos e inscripciones**: torneos por videojuego (Q9), por organizador (Q11), por fecha (Q12), búsqueda por código (Q15); equipos inscritos en un torneo (Q13) y torneos de un equipo (Q14). Las inscripciones son el corazón: al inscribir un equipo, este servicio escribe las tablas desnormalizadas y **publica un evento**.
+- **Catálogos**: además de Q8/Q10, guarda plataforma del videojuego y email del organizador.
+- **Torneos e inscripciones**: torneos con fecha de inicio/fin, CRUD con ownership y bloqueo por
+  dependencias; Q9/Q11–Q15 e inscripción N:N. Al inscribir un equipo escribe las tablas
+  desnormalizadas y **publica un evento**.
 - **Premios**: premios de un torneo (Q20) y premios recibidos por un equipo (Q21). Un premio pertenece al torneo, por eso vive acá.
 
 ### matches (`esports_matches`) — Q16–Q19
@@ -67,9 +72,9 @@ Otro ejemplo: al registrar una partida como organizador, `matches` necesita sabe
 ### Autenticación y autorización
 El gateway no centraliza reglas de permisos; solo reenvía el header `Authorization`. El servicio `auth` emite tokens, y `teams`, `tournaments` y `matches` validan esos tokens en sus mutaciones:
 
-- `admin`: puede todo; lo usa el seeder y la suite de integración.
-- `organizador`: puede operar únicamente torneos de su `organizador_id`. No administra videojuegos, porque son catálogo global.
-- `capitan`: puede agregar jugadores/inscribir únicamente su `equipo_id`.
+- `admin`: administra usuarios, catálogos, equipos, jugadores y cualquier torneo; lo usa el seeder y la suite.
+- `organizador`: crea/edita torneos propios y registra sus premios/partidas. No administra videojuegos.
+- `capitan`: gestiona el roster e inscripciones únicamente de su `equipo_id`.
 - `fan` o anónimo: solo lectura.
 
 Las lecturas Q1–Q24 siguen públicas para que el frontend pueda funcionar como visitante.
@@ -93,6 +98,8 @@ El modelo Chebotko duplica datos a propósito: una tabla por patrón de consulta
 - **Dentro del mismo servicio**, las escrituras a varias tablas desnormalizadas van en un **`BATCH` de CQL** (logged batch), para que queden consistentes entre sí. Ejemplos:
   - teams, crear equipo → `equipos` + `equipos_por_fecha` + `equipos_por_tag`.
   - teams, agregar jugador a un equipo → `jugadores` + `jugadores_por_nickname` + `jugadores_por_pais` + `jugadores_por_equipo` + `integrantes_por_equipo`.
+  - teams, liberar/fichar/transferir → roster activo + `membresias_por_jugador` + lookups del jugador.
+  - teams, editar equipo → tablas base/fecha y `DELETE` + `INSERT` en `equipos_por_tag` si cambia el tag.
   - tournaments, crear torneo → `torneos` + `torneos_por_videojuego` + `torneos_por_organizador` + `torneos_por_fecha` + `torneo_por_codigo`.
   - tournaments, inscribir equipo → `equipos_por_torneo` + `torneos_por_equipo`.
   - tournaments, asignar premio → `premios_por_torneo` + `premios_por_equipo`.

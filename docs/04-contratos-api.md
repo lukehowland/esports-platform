@@ -79,12 +79,22 @@ Ejemplo de la regla en acción: "torneos de un equipo" (Q14) NO va a `/api/equip
 | Mutación | Regla |
 |---|---|
 | `POST /api/equipos` | `admin` |
+| `PUT /api/equipos/{equipoId}` | `admin`; bloquea con `409` si tiene roster activo |
+| `DELETE /api/equipos/{equipoId}` | `admin`; bloquea con `409` si tiene roster activo |
 | `POST /api/equipos/{equipoId}/jugadores` | `admin` o `capitan` con `equipo_id == equipoId` |
+| `PUT /api/jugadores/{jugadorId}` | `admin` o `capitan` del equipo activo del jugador |
+| `DELETE /api/jugadores/{jugadorId}` | `admin`; bloquea con `409` si tiene equipo activo |
+| `POST /api/jugadores/{jugadorId}/liberar` | `admin` o `capitan` del equipo activo |
+| `POST /api/jugadores/{jugadorId}/asignar` | `admin`; o `capitan` del destino si es agente libre |
 | `POST /api/videojuegos` | `admin` |
 | `PUT /api/videojuegos/{videojuegoId}` | `admin`; bloquea con `409` si tiene torneos |
 | `DELETE /api/videojuegos/{videojuegoId}` | `admin`; bloquea con `409` si tiene torneos |
 | `POST /api/organizadores` | `admin` |
+| `PUT /api/organizadores/{organizadorId}` | `admin`; bloquea con `409` si tiene torneos |
+| `DELETE /api/organizadores/{organizadorId}` | `admin`; bloquea con `409` si tiene torneos |
 | `POST /api/torneos` | `admin` u `organizador` con `organizador_id == organizadorId` del body |
+| `PUT /api/torneos/{torneoId}` | `admin` u `organizador` dueño; bloquea con `409` si tiene inscritos/premios |
+| `DELETE /api/torneos/{torneoId}` | `admin` u `organizador` dueño; bloquea con `409` si tiene inscritos/premios |
 | `POST /api/torneos/{torneoId}/inscripciones` | `admin` o `capitan` con `equipo_id == equipoId` del body |
 | `POST /api/torneos/{torneoId}/premios` | `admin` u `organizador` dueño del torneo; si hay `equipoId`, debe estar inscrito |
 | `POST /api/partidas` | `admin` u `organizador` dueño del torneo; ambos equipos deben estar inscritos |
@@ -98,11 +108,23 @@ Todas las lecturas Q1–Q24 son públicas/anónimas.
 ### Escritura
 - `POST /api/equipos` — crear equipo. → `BATCH` `equipos` + `equipos_por_fecha` + `equipos_por_tag`.
   ```jsonc
-  { "nombre": "Tigres eSports", "tag": "TIG", "pais": "Bolivia" }
+  { "nombre": "Tigres eSports", "tag": "TIG", "pais": "BO" }
   ```
+- `PUT /api/equipos/{equipoId}` — editar nombre, tag y país (solo `admin`, `409` con roster).
+- `DELETE /api/equipos/{equipoId}` — eliminar un equipo sin roster (solo `admin`).
 - `POST /api/equipos/{equipoId}/jugadores` — agregar jugador a un equipo. → `BATCH` `jugadores` + `jugadores_por_nickname` + `jugadores_por_pais` + `jugadores_por_equipo` + `integrantes_por_equipo`.
   ```jsonc
-  { "nickname": "ElTigre", "nombre": "Juan Perez", "pais": "Bolivia", "rol": "Mid" }
+  {
+    "nickname": "ElTigre", "nombre": "Juan Perez", "pais": "BO", "rol": "MID",
+    "email": "eltigre@tig.gg", "telefono": "+591-70000000"
+  }
+  ```
+- `PUT /api/jugadores/{jugadorId}` — editar nombre, email y teléfono.
+- `DELETE /api/jugadores/{jugadorId}` — eliminar un agente libre (solo `admin`).
+- `POST /api/jugadores/{jugadorId}/liberar` — cerrar la membresía activa.
+- `POST /api/jugadores/{jugadorId}/asignar` — fichar un agente libre o transferirlo como admin.
+  ```jsonc
+  { "equipoDestinoId": "uuid", "rol": "MID" }
   ```
 
 ### Lectura
@@ -113,6 +135,9 @@ Todas las lecturas Q1–Q24 son públicas/anónimas.
 - `GET /api/equipos/por-tag/{tag}` — **Q5**. → `equipos_por_tag`.
 - `GET /api/equipos/{equipoId}/integrantes` — **Q6**. → `integrantes_por_equipo`.
 - `GET /api/equipos/{equipoId}` — equipo por id (lo usa tournaments por REST).
+- `GET /api/jugadores/{jugadorId}` — detalle canónico con email/teléfono.
+- `GET /api/jugadores/por-codigo/{codigo}` — lookup por código legible `J-001`.
+- `GET /api/jugadores/{jugadorId}/membresias` — historial temporal de equipos.
 
 ---
 
@@ -121,20 +146,28 @@ Todas las lecturas Q1–Q24 son públicas/anónimas.
 ### Escritura
 - `POST /api/videojuegos` — crear videojuego (solo `admin`). → `BATCH` `videojuegos` + `videojuegos_por_genero`.
   ```jsonc
-  { "nombre": "League of Legends", "genero": "MOBA" }
+  { "nombre": "League of Legends", "genero": "MOBA", "plataforma": "PC" }
   ```
+- `PUT /api/videojuegos/{videojuegoId}` / `DELETE` — gestión admin; `409` si tiene torneos.
 - `POST /api/organizadores` — crear organizador. → `BATCH` `organizadores` + `organizadores_lista`.
   ```jsonc
-  { "nombre": "Liga Santa Cruz" }
+  { "nombre": "Liga Santa Cruz", "email": "contacto@ligasc.gg" }
   ```
+- `PUT /api/organizadores/{organizadorId}` / `DELETE` — gestión admin; `409` si tiene torneos.
 - `POST /api/torneos` — crear torneo. → `BATCH` `torneos` + `torneos_por_videojuego` + `torneos_por_organizador` + `torneos_por_fecha` + `torneo_por_codigo`.
   ```jsonc
   {
     "nombre": "Copa Santa Cruz 2026", "codigo": "CSC26",
     "videojuegoId": "uuid", "organizadorId": "uuid",
-    "fechaInicio": "2026-07-01T18:00:00Z"
+    "fechaInicio": "2026-07-01T18:00:00Z",
+    "fechaFin": "2026-07-08T23:00:00Z"
   }
   ```
+- `PUT /api/torneos/{torneoId}` — editar nombre y fecha de fin; `409` si tiene inscritos/premios.
+  ```jsonc
+  { "nombre": "Copa Santa Cruz Finals", "fechaFin": "2026-07-09T23:00:00Z" }
+  ```
+- `DELETE /api/torneos/{torneoId}` — eliminar torneo sin inscritos/premios.
 - `POST /api/torneos/{torneoId}/inscripciones` — inscribir equipo. → REST a teams (nombre + roster), `BATCH` `equipos_por_torneo` + `torneos_por_equipo`, **publica `TeamRegisteredToTournament`**.
   ```jsonc
   { "equipoId": "uuid" }
@@ -201,7 +234,7 @@ Todas las lecturas Q1–Q24 son públicas/anónimas.
 
 ## Swagger
 
-Cada servicio expone Swagger UI en `/swagger` (`:5001`–`:5004`). Para el frontend alcanza con esas URLs + esta lista de endpoints. El gateway puede opcionalmente agregar los Swaggers, pero no es necesario para la demo.
+Cada servicio expone Swagger UI en `/swagger` (`:5001`–`:5005`). Para el frontend alcanza con esas URLs + esta lista de endpoints. El gateway puede opcionalmente agregar los Swaggers, pero no es necesario para la demo.
 
 ## Resumen rápido: query → endpoint
 

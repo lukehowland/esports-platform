@@ -77,9 +77,10 @@ public class RankingRepository : IRankingRepository
         var rows = await _session.ExecuteAsync(new SimpleStatement(
             $"SELECT equipo_id, total_torneos FROM {_ks}.ranking_equipos_global WHERE bucket = 'GLOBAL'"));
         return rows
-            .Select(r => new RankingEquipoResponse(r.GetValue<Guid>("equipo_id"), r.GetValue<long?>("total_torneos") ?? 0L))
+            .Select(r => new { EquipoId = r.GetValue<Guid>("equipo_id"), TotalTorneos = r.GetValue<long?>("total_torneos") ?? 0L })
             .OrderByDescending(x => x.TotalTorneos)
-            .Take(top);
+            .Take(top)
+            .Select((x, i) => new RankingEquipoResponse(i + 1, x.EquipoId, x.TotalTorneos));
     }
 
     public async Task<IEnumerable<RankingVictoriasResponse>> ObtenerRankingVictoriasAsync(int top)
@@ -87,9 +88,10 @@ public class RankingRepository : IRankingRepository
         var rows = await _session.ExecuteAsync(new SimpleStatement(
             $"SELECT equipo_id, total_victorias FROM {_ks}.ranking_victorias WHERE bucket = 'GLOBAL'"));
         return rows
-            .Select(r => new RankingVictoriasResponse(r.GetValue<Guid>("equipo_id"), r.GetValue<long?>("total_victorias") ?? 0L))
+            .Select(r => new { EquipoId = r.GetValue<Guid>("equipo_id"), TotalVictorias = r.GetValue<long?>("total_victorias") ?? 0L })
             .OrderByDescending(x => x.TotalVictorias)
-            .Take(top);
+            .Take(top)
+            .Select((x, i) => new RankingVictoriasResponse(i + 1, x.EquipoId, x.TotalVictorias));
     }
 
     public async Task<IEnumerable<RankingJugadorResponse>> ObtenerRankingJugadoresAsync(int top)
@@ -111,7 +113,8 @@ public class RankingRepository : IRankingRepository
             $"SELECT jugador_id, nickname FROM {_ks}.ranking_jugadores_meta WHERE jugador_id IN ?", ids));
         var nicknames = metaRows.ToDictionary(r => r.GetValue<Guid>("jugador_id"), r => r.GetValue<string?>("nickname"));
 
-        return ranking.Select(x => new RankingJugadorResponse(
+        return ranking.Select((x, i) => new RankingJugadorResponse(
+            i + 1,
             x.JugadorId,
             x.TotalTorneos,
             nicknames.GetValueOrDefault(x.JugadorId)));

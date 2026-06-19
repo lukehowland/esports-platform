@@ -30,8 +30,6 @@ const QUICK_LOGINS = [
 export default function LoginPage() {
   const { login } = useAuth();
   const [serverError, setServerError] = useState<string | null>(null);
-  const [quickLoading, setQuickLoading] = useState<string | null>(null);
-
   const { register, handleSubmit, setValue, formState: { errors, isSubmitting } } = useForm<FormData>({
     resolver: zodResolver(schema),
   });
@@ -44,20 +42,6 @@ export default function LoginPage() {
     } catch (err) {
       const msg = err instanceof ApiError ? err.detail : "Error al iniciar sesión";
       setServerError(msg);
-    }
-  };
-
-  const quickLogin = async (username: string, password: string, label: string) => {
-    setQuickLoading(label);
-    setServerError(null);
-    try {
-      await login(username, password);
-      toast.success(`¡Bienvenido como ${label}!`);
-    } catch (err) {
-      const msg = err instanceof ApiError ? err.detail : "Error al iniciar sesión";
-      setServerError(msg);
-    } finally {
-      setQuickLoading(null);
     }
   };
 
@@ -140,19 +124,15 @@ export default function LoginPage() {
               <button
                 key={label}
                 type="button"
-                disabled={!!quickLoading || isSubmitting}
+                disabled={isSubmitting}
                 onClick={() => {
                   setValue("username", username);
                   setValue("password", password);
-                  quickLogin(username, password, label);
+                  setServerError(null);
                 }}
                 className={`rounded-lg border px-3 py-2 text-xs font-mono font-semibold uppercase tracking-wider transition-colors ${color} disabled:opacity-50 disabled:cursor-not-allowed`}
               >
-                {quickLoading === label ? (
-                  <span className="flex items-center justify-center gap-1">
-                    <Loader2 className="w-3 h-3 animate-spin" /> {label}
-                  </span>
-                ) : label}
+                {label}
               </button>
             ))}
           </div>

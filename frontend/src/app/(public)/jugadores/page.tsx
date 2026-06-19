@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useQueries, useQuery } from "@tanstack/react-query";
+import Link from "next/link";
 import { Search, User, Globe } from "lucide-react";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -122,26 +123,28 @@ function TodosJugadores() {
           <p className="text-xs text-muted-foreground mb-3">{filtrados.length} jugadores</p>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
             {filtrados.map((j) => (
-              <Card key={j.jugadorId} className="border-border hover:border-primary/30 transition-colors">
-                <CardHeader className="py-3">
-                  <div className="flex items-center gap-2">
-                    <User className="h-4 w-4 text-muted-foreground" />
-                    <span className="font-mono text-primary text-sm font-bold">{j.nickname}</span>
-                    {tagPorEquipo.get(j.equipoId) && (
-                      <span className="hud-clip-sm border border-violet/30 bg-violet/10 text-violet font-mono text-[10px] px-1.5 py-0.5 ml-auto">
-                        {tagPorEquipo.get(j.equipoId)}
+              <Link key={j.jugadorId} href={`/jugadores/${j.jugadorId}`}>
+                <Card className="border-border hover:border-primary/30 transition-colors cursor-pointer">
+                  <CardHeader className="py-3">
+                    <div className="flex items-center gap-2">
+                      <span className="hud-clip-sm border border-gold/30 bg-gold/10 text-gold font-mono text-[10px] px-1.5 py-0.5">{j.codigo}</span>
+                      <span className="font-mono text-primary text-sm font-bold">{j.nickname}</span>
+                      {j.equipoId && tagPorEquipo.get(j.equipoId) && (
+                        <span className="hud-clip-sm border border-violet/30 bg-violet/10 text-violet font-mono text-[10px] px-1.5 py-0.5 ml-auto">
+                          {tagPorEquipo.get(j.equipoId)}
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-xs text-foreground mt-0.5">{j.nombre}</p>
+                    <div className="flex items-center gap-2 mt-1">
+                      <Badge variant="muted" className="w-fit">{j.rol}</Badge>
+                      <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                        <Globe className="h-3 w-3" /> {j.pais}
                       </span>
-                    )}
-                  </div>
-                  <p className="text-xs text-foreground mt-0.5">{j.nombre}</p>
-                  <div className="flex items-center gap-2 mt-1">
-                    <Badge variant="muted" className="w-fit">{j.rol}</Badge>
-                    <span className="flex items-center gap-1 text-xs text-muted-foreground">
-                      <Globe className="h-3 w-3" /> {j.pais}
-                    </span>
-                  </div>
-                </CardHeader>
-              </Card>
+                    </div>
+                  </CardHeader>
+                </Card>
+              </Link>
             ))}
           </div>
         </div>
@@ -183,22 +186,24 @@ function BuscarNickname() {
             ? <p className="text-sm text-muted-foreground">No se encontró el jugador <span className="font-mono text-primary">{query}</span>.</p>
             : <ErrorState error={error} />
         ) : data ? (
-          <Card className="max-w-sm border-primary/20">
-            <CardHeader className="pb-2">
-              <div className="flex items-center gap-2">
-                <User className="h-5 w-5 text-primary" />
-                <span className="font-mono text-primary font-bold">{data.nickname}</span>
-              </div>
-            </CardHeader>
-            <CardContent className="space-y-1">
-              <p className="text-sm text-foreground">{data.nombre}</p>
-              <div className="flex items-center gap-2">
-                <Globe className="h-3.5 w-3.5 text-muted-foreground" />
-                <span className="text-xs text-muted-foreground">{data.pais}</span>
-              </div>
-              <Badge variant="muted" className="mt-1">{data.rol}</Badge>
-            </CardContent>
-          </Card>
+          <Link href={`/jugadores/${data.jugadorId}`}>
+            <Card className="max-w-sm border-primary/20 hover:border-primary/40 transition-colors cursor-pointer">
+              <CardHeader className="pb-2">
+                <div className="flex items-center gap-2">
+                  <span className="hud-clip-sm border border-gold/30 bg-gold/10 text-gold font-mono text-[10px] px-1.5 py-0.5">{data.codigo}</span>
+                  <span className="font-mono text-primary font-bold">{data.nickname}</span>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-1">
+                <p className="text-sm text-foreground">{data.nombre}</p>
+                <div className="flex items-center gap-2">
+                  <Globe className="h-3.5 w-3.5 text-muted-foreground" />
+                  <span className="text-xs text-muted-foreground">{data.pais}</span>
+                </div>
+                <Badge variant="muted" className="mt-1">{data.rol}</Badge>
+              </CardContent>
+            </Card>
+          </Link>
         ) : null
       )}
     </div>
@@ -267,16 +272,18 @@ function BuscarPorPais() {
             <p className="text-xs text-muted-foreground mb-3">{data?.length} jugadores de {query}</p>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
               {data?.map((j) => (
-                <Card key={j.jugadorId} className="border-border hover:border-primary/30 transition-colors">
-                  <CardHeader className="py-3">
-                    <div className="flex items-center gap-2">
-                      <User className="h-4 w-4 text-muted-foreground" />
-                      <span className="font-mono text-primary text-sm font-bold">{j.nickname}</span>
-                    </div>
-                    <p className="text-xs text-foreground mt-0.5">{j.nombre}</p>
-                    <Badge variant="muted" className="w-fit mt-1">{j.rol}</Badge>
-                  </CardHeader>
-                </Card>
+                <Link key={j.jugadorId} href={`/jugadores/${j.jugadorId}`}>
+                  <Card className="border-border hover:border-primary/30 transition-colors cursor-pointer">
+                    <CardHeader className="py-3">
+                      <div className="flex items-center gap-2">
+                        <span className="hud-clip-sm border border-gold/30 bg-gold/10 text-gold font-mono text-[10px] px-1.5 py-0.5">{j.codigo}</span>
+                        <span className="font-mono text-primary text-sm font-bold">{j.nickname}</span>
+                      </div>
+                      <p className="text-xs text-foreground mt-0.5">{j.nombre}</p>
+                      <Badge variant="muted" className="w-fit mt-1">{j.rol}</Badge>
+                    </CardHeader>
+                  </Card>
+                </Link>
               ))}
             </div>
           </div>

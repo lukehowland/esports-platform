@@ -11,6 +11,7 @@ import { isCapitan } from "@/lib/auth/types";
 import { getEquipoPorId, getIntegrantesPorEquipo, agregarJugador, type AgregarJugadorDto } from "@/lib/api/equipos";
 import { getTorneosPorEquipo, getTorneosPorFecha, inscribirEquipo } from "@/lib/api/torneos";
 import { HudPanel, HudEyebrow } from "@/components/hud-panel";
+import { RosterManager } from "@/components/roster-manager";
 import { StatTile } from "@/components/stat-tile";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -142,29 +143,9 @@ export default function MiEquipoPage() {
           </TabsTrigger>
         </TabsList>
 
-        {/* Roster */}
+        {/* Roster — gestión RF-03: liberar integrantes y fichar agentes libres */}
         <TabsContent value="roster" className="mt-4">
-          <HudPanel>
-            {integrantes && integrantes.length > 0 ? (
-              <div className="divide-y divide-line">
-                {integrantes.map((j) => (
-                  <div key={j.jugadorId} className="flex items-center justify-between px-4 py-3">
-                    <div>
-                      <p className="text-sm font-semibold text-foreground">{j.nickname}</p>
-                      <p className="eyebrow mt-0.5">{j.nombre} · {j.pais}</p>
-                    </div>
-                    <span className="hud-clip-sm border border-violet/30 bg-violet/10 text-violet text-xs font-mono px-2 py-0.5">
-                      {j.rol}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="px-4 py-8 text-center text-muted-foreground text-sm">
-                Sin jugadores aún. Agregá el primer integrante.
-              </div>
-            )}
-          </HudPanel>
+          <RosterManager equipoId={equipoId} equipoNombre={equipo.nombre} esAdmin={false} />
         </TabsContent>
 
         {/* Agregar jugador */}

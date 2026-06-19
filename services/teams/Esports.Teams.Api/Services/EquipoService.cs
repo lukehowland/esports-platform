@@ -50,18 +50,36 @@ public class EquipoService : IEquipoService
 
     public async Task<JugadorResponse> AgregarJugadorAsync(Guid equipoId, AgregarJugadorRequest request)
     {
+        var equipo = await _equipoRepo.ObtenerPorIdAsync(equipoId)
+            ?? throw new InvalidOperationException($"El equipo {equipoId} no existe.");
+
+        var ahora = DateTimeOffset.UtcNow;
         var jugador = new Jugador
         {
             JugadorId = Guid.NewGuid(),
+            Codigo = await _jugadorRepo.SiguienteCodigoJugadorAsync(),
             Nickname = request.Nickname.Trim(),
             Nombre = request.Nombre.Trim(),
             Pais = request.Pais.Trim().ToUpperInvariant(),
             Rol = request.Rol.Trim().ToUpperInvariant(),
             EquipoId = equipoId,
-            FechaRegistro = DateTimeOffset.UtcNow
+            FechaRegistro = ahora
         };
-        await _jugadorRepo.AgregarJugadorAsync(jugador);
-        return new JugadorResponse(jugador.JugadorId, jugador.Nickname, jugador.Nombre, jugador.Pais, jugador.Rol, jugador.EquipoId);
+
+        // RF-03: el alta abre la membresía activa del jugador en su primer equipo.
+        var membresia = new Membresia
+        {
+            JugadorId = jugador.JugadorId,
+            EquipoId = equipoId,
+            NombreEquipo = equipo.Nombre,
+            TagEquipo = equipo.Tag,
+            Rol = jugador.Rol,
+            FechaDesde = ahora,
+            FechaHasta = null
+        };
+
+        await _jugadorRepo.AgregarJugadorAsync(jugador, membresia);
+        return new JugadorResponse(jugador.JugadorId, jugador.Codigo, jugador.Nickname, jugador.Nombre, jugador.Pais, jugador.Rol, jugador.EquipoId);
     }
 
     public Task<IEnumerable<EquipoResponse>> ObtenerPorFechaAsync() => _equipoRepo.ObtenerPorFechaAsync();

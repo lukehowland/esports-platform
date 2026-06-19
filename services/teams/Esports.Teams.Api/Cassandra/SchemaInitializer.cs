@@ -50,6 +50,7 @@ public class SchemaInitializer
             await session.ExecuteAsync(new SimpleStatement(@"
                 CREATE TABLE IF NOT EXISTS jugadores (
                     jugador_id     uuid,
+                    codigo         text,
                     nickname       text,
                     nombre         text,
                     pais           text,
@@ -75,6 +76,7 @@ public class SchemaInitializer
                 CREATE TABLE IF NOT EXISTS jugadores_por_nickname (
                     nickname   text,
                     jugador_id uuid,
+                    codigo     text,
                     nombre     text,
                     pais       text,
                     rol        text,
@@ -87,6 +89,7 @@ public class SchemaInitializer
                 CREATE TABLE IF NOT EXISTS jugadores_por_pais (
                     pais       text,
                     jugador_id uuid,
+                    codigo     text,
                     nickname   text,
                     nombre     text,
                     rol        text,
@@ -100,6 +103,7 @@ public class SchemaInitializer
                     equipo_id  uuid,
                     pais       text,
                     jugador_id uuid,
+                    codigo     text,
                     nickname   text,
                     nombre     text,
                     rol        text,
@@ -133,12 +137,63 @@ public class SchemaInitializer
                 CREATE TABLE IF NOT EXISTS integrantes_por_equipo (
                     equipo_id  uuid,
                     jugador_id uuid,
+                    codigo     text,
                     nickname   text,
                     nombre     text,
                     pais       text,
                     rol        text,
                     PRIMARY KEY ((equipo_id), jugador_id)
                 ) WITH CLUSTERING ORDER BY (jugador_id ASC)"));
+
+            // RF-03: lookup de jugador por código legible (J-001), patrón Q5/Q15
+            await session.ExecuteAsync(new SimpleStatement(@"
+                CREATE TABLE IF NOT EXISTS jugador_por_codigo (
+                    codigo     text,
+                    jugador_id uuid,
+                    nickname   text,
+                    nombre     text,
+                    pais       text,
+                    rol        text,
+                    equipo_id  uuid,
+                    PRIMARY KEY (codigo)
+                )"));
+
+            // RF-03: membresías jugador↔equipo con validez temporal (N:N en el tiempo).
+            // Activa = fecha_hasta IS NULL. La fila nunca se borra: liberar cierra (fecha_hasta).
+            await session.ExecuteAsync(new SimpleStatement(@"
+                CREATE TABLE IF NOT EXISTS membresias_por_jugador (
+                    jugador_id    uuid,
+                    fecha_desde   timestamp,
+                    equipo_id     uuid,
+                    nombre_equipo text,
+                    tag_equipo    text,
+                    rol           text,
+                    fecha_hasta   timestamp,
+                    PRIMARY KEY ((jugador_id), fecha_desde, equipo_id)
+                ) WITH CLUSTERING ORDER BY (fecha_desde DESC, equipo_id ASC)"));
+
+            // RF-03: secuencia para generar el código J-001 vía LWT (compare-and-set)
+            await session.ExecuteAsync(new SimpleStatement(@"
+                CREATE TABLE IF NOT EXISTS secuencias (
+                    nombre text,
+                    valor  int,
+                    PRIMARY KEY (nombre)
+                )"));
+
+            // Volúmenes existentes: agregar la columna 'codigo' de forma idempotente
+            // (CREATE ... IF NOT EXISTS no toca tablas ya creadas). Cassandra falla si la
+            // columna ya existe; se ignora ese caso.
+            foreach (var tabla in new[] { "jugadores", "jugadores_por_nickname", "jugadores_por_pais", "jugadores_por_equipo", "integrantes_por_equipo" })
+            {
+                try
+                {
+                    await session.ExecuteAsync(new SimpleStatement($"ALTER TABLE {tabla} ADD codigo text"));
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogDebug("ALTER TABLE {Tabla} ADD codigo omitido (probablemente ya existe): {Msg}", tabla, ex.Message);
+                }
+            }
 
             _logger.LogInformation("Schema for keyspace {Keyspace} initialized successfully.", keyspace);
         });

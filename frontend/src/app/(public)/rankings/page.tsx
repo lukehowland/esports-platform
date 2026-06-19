@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import Link from "next/link";
 import { BarChart3, Trophy, Swords, User, RefreshCw, Loader2 } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
@@ -23,9 +24,15 @@ function EquipoNombre({ equipoId }: { equipoId: string }) {
     queryFn: () => getEquipoPorId(equipoId),
     staleTime: 5 * 60_000,
   });
-  if (isLoading) return <span className="text-muted-foreground animate-pulse">…</span>;
-  if (!data) return <span className="font-mono text-xs text-muted-foreground">{shortId(equipoId)}</span>;
-  return <span className="font-medium">[{data.tag}] {data.nombre}</span>;
+  return (
+    <Link href={`/equipos/${equipoId}`} className="hover:text-violet hover:underline">
+      {isLoading
+        ? <span className="text-muted-foreground animate-pulse">…</span>
+        : data
+          ? <span className="font-medium">[{data.tag}] {data.nombre}</span>
+          : <span className="font-mono text-xs text-muted-foreground">{shortId(equipoId)}</span>}
+    </Link>
+  );
 }
 
 function RankingEquiposTab() {
@@ -172,10 +179,12 @@ function RankingJugadoresTab() {
               <TableRow key={r.jugadorId}>
                 <TableCell><RankingPosition position={i + 1} /></TableCell>
                 <TableCell>
-                  {r.nombreJugador
-                    ? <span className="font-medium">{r.nombreJugador}</span>
-                    : <span className="font-mono text-xs text-muted-foreground" title={r.jugadorId}>{shortId(r.jugadorId)}</span>
-                  }
+                  <Link href={`/jugadores/${r.jugadorId}`} className="hover:text-violet hover:underline">
+                    {r.nombreJugador
+                      ? <span className="font-medium">{r.nombreJugador}</span>
+                      : <span className="font-mono text-xs text-muted-foreground" title={r.jugadorId}>{shortId(r.jugadorId)}</span>
+                    }
+                  </Link>
                 </TableCell>
                 <TableCell className="text-right font-mono font-semibold text-primary">{r.totalTorneos.toString()}</TableCell>
               </TableRow>

@@ -1,7 +1,8 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { Users, Flag } from "lucide-react";
+import Link from "next/link";
+import { Users, Flag, ChevronRight } from "lucide-react";
 import { RequireRole } from "@/lib/auth/require-role";
 import { HudPanel, HudEyebrow } from "@/components/hud-panel";
 import { StatTile } from "@/components/stat-tile";
@@ -50,9 +51,10 @@ function EquiposContent() {
         ) : (
           <div className="divide-y divide-line">
             {equipos?.map((e) => (
-              <div
+              <Link
                 key={e.equipoId}
-                className="flex items-center justify-between px-4 py-3"
+                href={`/panel/equipos/${e.equipoId}`}
+                className="flex items-center justify-between px-4 py-3 hover:bg-secondary/40 transition-colors"
               >
                 <div className="flex items-center gap-3">
                   <span className="hud-clip-sm border border-violet/30 bg-violet/10 text-violet text-xs font-mono px-2 py-0.5">
@@ -65,8 +67,11 @@ function EquiposContent() {
                     </p>
                   </div>
                 </div>
-                <span className="eyebrow">{formatDate(e.fechaCreacion)}</span>
-              </div>
+                <div className="flex items-center gap-2">
+                  <span className="eyebrow">{formatDate(e.fechaCreacion)}</span>
+                  <ChevronRight className="w-4 h-4 text-muted-foreground" />
+                </div>
+              </Link>
             ))}
           </div>
         )}

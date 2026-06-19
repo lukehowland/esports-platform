@@ -11,6 +11,9 @@ public interface IEquipoRepository
     Task<Equipo?> ObtenerPorIdAsync(Guid equipoId);
     Task<IEnumerable<EquipoResponse>> ObtenerPorFechaAsync();
     Task<EquipoResponse?> ObtenerPorTagAsync(string tag);
+    Task<bool> TieneIntegrantesAsync(Guid equipoId);
+    Task ActualizarAsync(Equipo original, Equipo nuevo);
+    Task EliminarAsync(Equipo equipo);
 }
 
 public class EquipoRepository : IEquipoRepository
@@ -24,6 +27,9 @@ public class EquipoRepository : IEquipoRepository
     private readonly PreparedStatement _selectById;
     private readonly PreparedStatement _selectPorFecha;
     private readonly PreparedStatement _selectPorTag;
+    private readonly PreparedStatement _tieneIntegrantes;
+    private readonly PreparedStatement _updEquipo, _updEquipoPorFecha, _updEquipoPorTag;
+    private readonly PreparedStatement _delEquipo, _delEquipoPorFecha, _delEquipoPorTag;
 
     public EquipoRepository(ICassandraSession cassandra, IConfiguration config)
     {
@@ -42,6 +48,22 @@ public class EquipoRepository : IEquipoRepository
             $"SELECT equipo_id, nombre, tag, pais, fecha_creacion FROM {_keyspace}.equipos_por_fecha WHERE bucket = ?");
         _selectPorTag = _session.Prepare(
             $"SELECT equipo_id, nombre, pais FROM {_keyspace}.equipos_por_tag WHERE tag = ?");
+
+        // RF-02: editar / eliminar (block-on-dependents = tiene integrantes)
+        _tieneIntegrantes = _session.Prepare(
+            $"SELECT jugador_id FROM {_keyspace}.integrantes_por_equipo WHERE equipo_id = ? LIMIT 1");
+        _updEquipo = _session.Prepare(
+            $"UPDATE {_keyspace}.equipos SET nombre = ?, tag = ?, pais = ? WHERE equipo_id = ?");
+        _updEquipoPorFecha = _session.Prepare(
+            $"UPDATE {_keyspace}.equipos_por_fecha SET nombre = ?, tag = ?, pais = ? WHERE bucket = ? AND fecha_creacion = ? AND equipo_id = ?");
+        _updEquipoPorTag = _session.Prepare(
+            $"UPDATE {_keyspace}.equipos_por_tag SET nombre = ?, pais = ? WHERE tag = ?");
+        _delEquipo = _session.Prepare(
+            $"DELETE FROM {_keyspace}.equipos WHERE equipo_id = ?");
+        _delEquipoPorFecha = _session.Prepare(
+            $"DELETE FROM {_keyspace}.equipos_por_fecha WHERE bucket = ? AND fecha_creacion = ? AND equipo_id = ?");
+        _delEquipoPorTag = _session.Prepare(
+            $"DELETE FROM {_keyspace}.equipos_por_tag WHERE tag = ?");
     }
 
     public async Task CrearEquipoAsync(Equipo equipo)
@@ -89,5 +111,43 @@ public class EquipoRepository : IEquipoRepository
             tag,
             row.GetValue<string>("pais"),
             default);
+    }
+
+    public async Task<bool> TieneIntegrantesAsync(Guid equipoId)
+    {
+        var rows = await _session.ExecuteAsync(_tieneIntegrantes.Bind(equipoId));
+        return rows.Any();
+    }
+
+    public async Task ActualizarAsync(Equipo original, Equipo nuevo)
+    {
+        // BATCH: equipos + equipos_por_fecha (nombre/tag/pais son columnas de valor).
+        // El tag es la PK de equipos_por_tag: si cambia, se borra la fila vieja y se inserta
+        // la nueva; si no, se actualiza nombre/pais. Solo se edita sin integrantes, así que
+        // no hay copias del nombre del equipo en otros servicios que queden obsoletas.
+        var batch = new BatchStatement();
+        batch.Add(_updEquipo.Bind(nuevo.Nombre, nuevo.Tag, nuevo.Pais, original.EquipoId));
+        batch.Add(_updEquipoPorFecha.Bind(nuevo.Nombre, nuevo.Tag, nuevo.Pais, "GLOBAL", original.FechaCreacion, original.EquipoId));
+
+        if (string.Equals(nuevo.Tag, original.Tag, StringComparison.Ordinal))
+        {
+            batch.Add(_updEquipoPorTag.Bind(nuevo.Nombre, nuevo.Pais, nuevo.Tag));
+        }
+        else
+        {
+            batch.Add(_delEquipoPorTag.Bind(original.Tag));
+            batch.Add(_insertEquipoPorTag.Bind(nuevo.Tag, original.EquipoId, nuevo.Nombre, nuevo.Pais));
+        }
+
+        await _session.ExecuteAsync(batch);
+    }
+
+    public async Task EliminarAsync(Equipo equipo)
+    {
+        var batch = new BatchStatement();
+        batch.Add(_delEquipo.Bind(equipo.EquipoId));
+        batch.Add(_delEquipoPorFecha.Bind("GLOBAL", equipo.FechaCreacion, equipo.EquipoId));
+        batch.Add(_delEquipoPorTag.Bind(equipo.Tag));
+        await _session.ExecuteAsync(batch);
     }
 }

@@ -35,7 +35,7 @@ function TorneosContent() {
         </h1>
       </div>
 
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col items-start justify-between gap-3 sm:flex-row sm:items-center">
         <div className="grid grid-cols-2 gap-3">
           <StatTile value={torneos?.length ?? "—"} label="Total torneos" color="violet" />
         </div>

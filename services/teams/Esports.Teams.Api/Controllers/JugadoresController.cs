@@ -123,4 +123,43 @@ public class JugadoresController : ControllerBase
             _ => Problem(statusCode: StatusCodes.Status500InternalServerError)
         };
     }
+
+    // RF-01: editar contacto del jugador — admin o capitán del equipo actual.
+    [HttpPut("{jugadorId:guid}")]
+    [Authorize]
+    public async Task<IActionResult> Editar(Guid jugadorId, [FromBody] EditarJugadorRequest request)
+    {
+        var jugador = await _service.ObtenerPorIdAsync(jugadorId);
+        if (jugador is null) return NotFound();
+
+        if (!User.EsAdmin())
+        {
+            if (User.GetRol() != AuthConstants.Roles.Capitan || User.GetEquipoId() != jugador.EquipoId)
+                return Problem(
+                    title: "Acceso denegado",
+                    statusCode: StatusCodes.Status403Forbidden,
+                    detail: "Solo el admin o el capitán del equipo del jugador puede editarlo.");
+        }
+
+        return await _service.ActualizarContactoAsync(jugadorId, request)
+            ? Ok(await _service.ObtenerPorIdAsync(jugadorId))
+            : NotFound();
+    }
+
+    // RF-01: eliminar jugador — admin; solo si es agente libre (sin equipo activo).
+    [HttpDelete("{jugadorId:guid}")]
+    [Authorize(Roles = AuthConstants.Roles.Admin)]
+    public async Task<IActionResult> Eliminar(Guid jugadorId)
+    {
+        return await _service.EliminarAsync(jugadorId) switch
+        {
+            EliminacionResultado.Ok => NoContent(),
+            EliminacionResultado.NoEncontrado => NotFound(),
+            EliminacionResultado.TieneEquipoActivo => Problem(
+                title: "El jugador tiene equipo activo",
+                statusCode: StatusCodes.Status409Conflict,
+                detail: "Solo se puede eliminar a un agente libre. Liberá al jugador primero."),
+            _ => Problem(statusCode: StatusCodes.Status500InternalServerError)
+        };
+    }
 }

@@ -30,36 +30,38 @@ export default function PanelLayout({ children }: { children: React.ReactNode })
   return (
     <RequireRole roles={["admin", "organizador"]}>
       <WorkspaceTopbar section={section} />
-      <div className="container mx-auto max-w-7xl px-4 py-6 flex gap-6 min-h-[calc(100vh-3.5rem)]">
+      <div className="container mx-auto flex min-h-[calc(100vh-3.5rem)] max-w-7xl flex-col gap-4 px-4 py-6 lg:flex-row lg:gap-6">
 
         {/* Sidebar */}
-        <aside className="w-52 shrink-0 space-y-1 pt-1">
+        <aside className="w-full shrink-0 pt-1 lg:w-52">
           {/* Identidad */}
-          <div className="hud-clip border border-violet/30 bg-violet/5 px-4 py-3 mb-4">
+          <div className="hud-clip mb-3 border border-violet/30 bg-violet/5 px-4 py-3 lg:mb-4">
             <p className="eyebrow text-violet mb-0.5">{rolLabel}</p>
             <p className="text-sm font-semibold text-foreground truncate">{nombre}</p>
           </div>
 
           {/* Links */}
-          {navItems.map(({ href, label, icon }) => {
-            const Icon = ICON_MAP[icon] ?? LayoutDashboard;
-            const isActive = pathname === href || (href !== "/panel" && pathname.startsWith(href));
-            return (
-              <Link
-                key={href}
-                href={href}
-                className={cn(
-                  "flex items-center gap-2.5 px-3 py-2 rounded text-sm font-semibold transition-colors",
-                  isActive
-                    ? "bg-violet/15 text-violet border border-violet/30"
-                    : "text-muted-foreground hover:text-foreground hover:bg-secondary/60"
-                )}
-              >
-                <Icon className="w-4 h-4 shrink-0" />
-                {label}
-              </Link>
-            );
-          })}
+          <nav className="flex gap-1 overflow-x-auto pb-2 lg:block lg:space-y-1 lg:overflow-visible lg:pb-0">
+            {navItems.map(({ href, label, icon }) => {
+              const Icon = ICON_MAP[icon] ?? LayoutDashboard;
+              const isActive = pathname === href || (href !== "/panel" && pathname.startsWith(href));
+              return (
+                <Link
+                  key={href}
+                  href={href}
+                  className={cn(
+                    "flex shrink-0 items-center gap-2.5 whitespace-nowrap rounded px-3 py-2 text-sm font-semibold transition-colors lg:w-full",
+                    isActive
+                      ? "bg-violet/15 text-violet border border-violet/30"
+                      : "text-muted-foreground hover:text-foreground hover:bg-secondary/60"
+                  )}
+                >
+                  <Icon className="w-4 h-4 shrink-0" />
+                  {label}
+                </Link>
+              );
+            })}
+          </nav>
         </aside>
 
         {/* Contenido */}

@@ -24,7 +24,10 @@ import {
 } from "@/lib/api/torneos";
 import { ApiError } from "@/lib/api/fetcher";
 
-const schema = z.object({ nombre: z.string().min(1, "Requerido").max(120) });
+const schema = z.object({
+  nombre: z.string().min(1, "Requerido").max(120),
+  email: z.string().email("Email inválido").max(160),
+});
 type Form = z.infer<typeof schema>;
 
 export default function PanelOrganizadoresPage() {
@@ -53,7 +56,7 @@ function OrganizadoresContent() {
   const refrescar = () => qc.invalidateQueries({ queryKey: ["organizadores"] });
 
   const crear = useMutation({
-    mutationFn: (d: Form) => crearOrganizador({ nombre: d.nombre }),
+    mutationFn: (d: Form) => crearOrganizador({ nombre: d.nombre, email: d.email }),
     onSuccess: () => {
       toast.success("Organizador creado");
       reset();
@@ -86,24 +89,29 @@ function OrganizadoresContent() {
         </h1>
       </div>
 
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         <StatTile value={orgs?.length ?? "—"} label="Organizadores" color="violet" />
       </div>
 
       <HudPanel className="p-5">
         <HudEyebrow className="block mb-4">nuevo organizador</HudEyebrow>
-        <form onSubmit={handleSubmit((d) => crear.mutate(d))} className="flex gap-3">
-          <div className="flex-1 space-y-1.5">
-            <Label className="eyebrow">Nombre</Label>
-            <Input placeholder="Riot Games Latam" {...register("nombre")} />
-            {errors.nombre && <p className="text-xs text-destructive">{errors.nombre.message}</p>}
+        <form onSubmit={handleSubmit((d) => crear.mutate(d))} className="space-y-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div className="space-y-1.5">
+              <Label className="eyebrow">Nombre</Label>
+              <Input placeholder="Riot Games Latam" {...register("nombre")} />
+              {errors.nombre && <p className="text-xs text-destructive">{errors.nombre.message}</p>}
+            </div>
+            <div className="space-y-1.5">
+              <Label className="eyebrow">Email</Label>
+              <Input placeholder="contacto@riot.gg" {...register("email")} />
+              {errors.email && <p className="text-xs text-destructive">{errors.email.message}</p>}
+            </div>
           </div>
-          <div className="pt-[22px]">
-            <Button type="submit" disabled={isSubmitting}>
-              {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
-              Crear
-            </Button>
-          </div>
+          <Button type="submit" disabled={isSubmitting}>
+            {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
+            Crear
+          </Button>
         </form>
         {serverError && (
           <div className="mt-3 rounded border border-destructive/40 bg-destructive/10 px-4 py-3">
@@ -126,7 +134,10 @@ function OrganizadoresContent() {
           <div className="divide-y divide-line">
             {orgs?.map((o) => (
               <div key={o.organizadorId} className="flex items-center justify-between px-4 py-3 gap-3">
-                <p className="text-sm font-semibold text-foreground truncate">{o.nombre}</p>
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold text-foreground truncate">{o.nombre}</p>
+                  <p className="eyebrow mt-0.5 truncate">{o.email}</p>
+                </div>
                 <div className="flex items-center gap-1 shrink-0">
                   <Button size="icon" variant="ghost" aria-label={`Editar ${o.nombre}`} onClick={() => setAEditar(o)}>
                     <Pencil className="w-4 h-4 text-violet" />
@@ -181,11 +192,11 @@ function EditarOrganizadorModal({
   const [serverError, setServerError] = useState<string | null>(null);
   const { register, handleSubmit, reset, formState: { errors } } = useForm<Form>({
     resolver: zodResolver(schema),
-    values: organizador ? { nombre: organizador.nombre } : undefined,
+    values: organizador ? { nombre: organizador.nombre, email: organizador.email } : undefined,
   });
 
   const editar = useMutation({
-    mutationFn: (d: Form) => editarOrganizador(organizador!.organizadorId, { nombre: d.nombre }),
+    mutationFn: (d: Form) => editarOrganizador(organizador!.organizadorId, { nombre: d.nombre, email: d.email }),
     onSuccess: () => {
       toast.success("Organizador actualizado");
       setServerError(null);
@@ -210,6 +221,11 @@ function EditarOrganizadorModal({
             <Label className="eyebrow">Nombre</Label>
             <Input {...register("nombre")} />
             {errors.nombre && <p className="text-xs text-destructive">{errors.nombre.message}</p>}
+          </div>
+          <div className="space-y-1.5">
+            <Label className="eyebrow">Email</Label>
+            <Input {...register("email")} />
+            {errors.email && <p className="text-xs text-destructive">{errors.email.message}</p>}
           </div>
           {serverError && (
             <div className="rounded border border-destructive/40 bg-destructive/10 px-4 py-3">

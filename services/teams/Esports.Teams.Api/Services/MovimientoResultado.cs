@@ -17,3 +17,11 @@ public enum LiberacionResultado
     JugadorNoEncontrado,   // 404
     YaEsAgenteLibre,       // 409 — no tenía equipo activo
 }
+
+/// <summary>Resultado de eliminar (hard-delete) a un jugador. Solo agentes libres.</summary>
+public enum EliminacionResultado
+{
+    Ok,                    // 204
+    NoEncontrado,          // 404
+    TieneEquipoActivo,     // 409 — debe liberarse primero
+}

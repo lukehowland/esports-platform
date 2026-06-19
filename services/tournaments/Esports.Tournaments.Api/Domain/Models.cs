@@ -5,12 +5,14 @@ public class Videojuego
     public Guid VideojuegoId { get; set; }
     public string Nombre { get; set; } = string.Empty;
     public string Genero { get; set; } = string.Empty;
+    public string Plataforma { get; set; } = string.Empty;
 }
 
 public class Organizador
 {
     public Guid OrganizadorId { get; set; }
     public string Nombre { get; set; } = string.Empty;
+    public string Email { get; set; } = string.Empty;
 }
 
 public class Torneo
@@ -23,6 +25,7 @@ public class Torneo
     public Guid OrganizadorId { get; set; }
     public string NombreOrganizador { get; set; } = string.Empty;
     public DateTimeOffset FechaInicio { get; set; }
+    public DateTimeOffset FechaFin { get; set; }
 }
 
 public class Premio

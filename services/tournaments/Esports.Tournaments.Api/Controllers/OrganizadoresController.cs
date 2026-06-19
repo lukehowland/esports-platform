@@ -45,7 +45,7 @@ public class OrganizadoresController : ControllerBase
         var resultado = await _svc.ActualizarAsync(id, req);
         return resultado switch
         {
-            MutacionResultado.Ok => Ok(new OrganizadorResponse(id, req.Nombre.Trim())),
+            MutacionResultado.Ok => Ok(new OrganizadorResponse(id, req.Nombre.Trim(), req.Email.Trim())),
             MutacionResultado.NoEncontrado => NoEncontrado(id),
             _ => ConDependencias(),
         };

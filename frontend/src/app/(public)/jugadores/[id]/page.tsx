@@ -3,7 +3,7 @@
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
-import { User, Globe, Shield, History } from "lucide-react";
+import { User, Globe, Shield, History, Mail, Phone } from "lucide-react";
 import { HudPanel, HudEyebrow } from "@/components/hud-panel";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -50,6 +50,10 @@ export default function JugadorDetallePage() {
           <span>{jugador.nombre}</span>
           <span className="flex items-center gap-1"><Globe className="w-3.5 h-3.5" /> {jugador.pais}</span>
           <Badge variant="muted">{jugador.rol}</Badge>
+        </div>
+        <div className="mt-1 flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+          {jugador.email && <span className="flex items-center gap-1"><Mail className="w-3.5 h-3.5" /> {jugador.email}</span>}
+          {jugador.telefono && <span className="flex items-center gap-1"><Phone className="w-3.5 h-3.5" /> {jugador.telefono}</span>}
         </div>
       </div>
 

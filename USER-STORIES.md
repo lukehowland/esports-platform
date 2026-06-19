@@ -10,7 +10,7 @@ Un sistema para **gestionar torneos de eSports**: organizadores crean torneos de
 
 - **Organizador** — crea torneos y define premios/partidas de sus torneos.
 - **Capitán / Equipo** — registra su equipo y jugadores; inscribe el equipo en torneos.
-- **Jugador** — pertenece a un equipo; tiene nick, país, rol.
+- **Jugador** — tiene código, nick, nombre, email, teléfono y país; puede cambiar de equipo en el tiempo.
 - **Fan / Visitante** — consulta equipos, torneos, partidas, rankings, premios.
 - **Admin demo** — usuario técnico del seed y pruebas; puede ejecutar mutaciones de setup.
 - **Sistema** — actor no humano: reacciona a eventos (actualizar rankings y stats).
@@ -20,12 +20,19 @@ Un sistema para **gestionar torneos de eSports**: organizadores crean torneos de
 ## Épica 1 — Jugadores y equipos (servicio teams)
 
 **HU-01 — Registrar un equipo**
-Como **capitán**, quiero registrar mi equipo (nombre, tag, país), para participar en torneos.
+Como **admin**, quiero registrar un equipo (nombre, tag, país y fecha de creación automática), para habilitar su gestión.
 - *Endpoint:* `POST /api/equipos`.
 
 **HU-02 — Agregar jugadores a mi equipo**
-Como **capitán**, quiero agregar jugadores (nick, nombre, país, rol) a mi equipo, para armar mi plantel.
+Como **capitán**, quiero agregar jugadores (nick, nombre, email, teléfono, país y rol) a mi equipo, para armar mi plantel.
 - *Endpoint:* `POST /api/equipos/{equipoId}/jugadores`.
+
+**HU-02A — Gestionar jugadores y sus membresías**
+Como **capitán**, quiero editar el contacto de mis jugadores, liberarlos y fichar agentes libres; como
+**admin**, quiero además transferirlos o eliminar un agente libre.
+- *Criterios:* un jugador puede tener varias membresías históricas, pero solo una activa.
+- *Endpoints:* `PUT/DELETE /api/jugadores/{id}`, `POST /api/jugadores/{id}/liberar`,
+  `POST /api/jugadores/{id}/asignar`, `GET /api/jugadores/{id}/membresias`.
 
 **HU-03 — Buscar un jugador por su nickname**
 Como **fan**, quiero buscar un jugador por su nick exacto, para encontrarlo rápido.
@@ -51,29 +58,36 @@ Como **fan**, quiero buscar un equipo por su tag identificador (ej. "TIG"), para
 Como **fan** o **organizador**, quiero ver todos los integrantes de un equipo, para conocer su composición.
 - *Query:* **Q6** · *Endpoint:* `GET /api/equipos/{equipoId}/integrantes`.
 
+**HU-08A — Gestionar equipos**
+Como **admin**, quiero crear, editar y eliminar equipos sin roster, para mantener el catálogo operativo.
+- *Criterios:* cambiar el tag actualiza el índice Q5; editar/eliminar con roster devuelve `409`.
+- *Endpoints:* `POST /api/equipos`, `PUT/DELETE /api/equipos/{equipoId}`.
+
 ---
 
 ## Épica 2 — Catálogos, torneos, inscripciones y premios (servicio tournaments)
 
 **HU-09 — Registrar un videojuego**
-Como **admin**, quiero registrar un videojuego con su género, para mantener limpio el catálogo global disponible para torneos.
-- *Endpoint:* `POST /api/videojuegos`.
+Como **admin**, quiero registrar y gestionar un videojuego con su género y plataforma, para mantener limpio el catálogo global disponible para torneos.
+- *Endpoints:* `POST /api/videojuegos`, `PUT/DELETE /api/videojuegos/{id}`.
 
 **HU-10 — Ver videojuegos por género**
 Como **fan**, quiero ver los videojuegos disponibles de un género (ej. MOBA, FPS), para explorar el catálogo.
 - *Query:* **Q8** · *Endpoint:* `GET /api/videojuegos/por-genero/{genero}`.
 
 **HU-11 — Registrar un organizador**
-Como **organizador**, quiero registrarme en la plataforma, para poder crear torneos a mi nombre.
-- *Endpoint:* `POST /api/organizadores`.
+Como **admin**, quiero registrar y gestionar un organizador con nombre y correo electrónico, para vincular usuarios y torneos a una entidad válida.
+- *Endpoints:* `POST /api/organizadores`, `PUT/DELETE /api/organizadores/{id}`.
 
 **HU-12 — Ver todos los organizadores**
 Como **fan**, quiero ver la lista de organizadores registrados, para saber quién organiza torneos.
 - *Query:* **Q10** · *Endpoint:* `GET /api/organizadores`.
 
 **HU-13 — Crear un torneo**
-Como **organizador**, quiero crear un torneo (videojuego, fecha, código único), para abrir la competencia.
-- *Endpoint:* `POST /api/torneos`.
+Como **organizador**, quiero crear y gestionar un torneo (videojuego, fecha de inicio/fin, código
+único y organizador), para abrir la competencia y mantener sus datos.
+- *Endpoints:* `POST /api/torneos`, `PUT/DELETE /api/torneos/{id}`.
+- *Criterios:* solo el dueño o admin puede gestionarlo; con inscritos/premios devuelve `409`.
 
 **HU-14 — Ver torneos de un videojuego**
 Como **fan**, quiero ver los torneos de un videojuego ordenados por fecha, para seguir mi juego favorito.
@@ -195,17 +209,19 @@ Como **sistema**, quiero rechazar mutaciones sin token (`401`) o con rol/ownersh
 |---|---|---|---|
 | HU-01 | — | `POST /api/equipos` | teams |
 | HU-02 | — | `POST /api/equipos/{id}/jugadores` | teams |
+| HU-02A | — | `PUT/DELETE /api/jugadores/{id}`, membresías/asignación | teams |
 | HU-03 | Q1 | `GET /api/jugadores/por-nickname/{nickname}` | teams |
 | HU-04 | Q2 | `GET /api/jugadores/por-pais/{pais}` | teams |
 | HU-05 | Q3 | `GET /api/equipos/{id}/jugadores?pais=` | teams |
 | HU-06 | Q4 | `GET /api/equipos/por-fecha` | teams |
 | HU-07 | Q5 | `GET /api/equipos/por-tag/{tag}` | teams |
 | HU-08 | Q6 | `GET /api/equipos/{id}/integrantes` | teams |
-| HU-09 | — | `POST /api/videojuegos` | tournaments |
+| HU-08A | — | `PUT/DELETE /api/equipos/{id}` | teams |
+| HU-09 | — | `POST/PUT/DELETE /api/videojuegos` | tournaments |
 | HU-10 | Q8 | `GET /api/videojuegos/por-genero/{genero}` | tournaments |
-| HU-11 | — | `POST /api/organizadores` | tournaments |
+| HU-11 | — | `POST/PUT/DELETE /api/organizadores` | tournaments |
 | HU-12 | Q10 | `GET /api/organizadores` | tournaments |
-| HU-13 | — | `POST /api/torneos` | tournaments |
+| HU-13 | — | `POST/PUT/DELETE /api/torneos` | tournaments |
 | HU-14 | Q9 | `GET /api/videojuegos/{id}/torneos` | tournaments |
 | HU-15 | Q11 | `GET /api/organizadores/{id}/torneos` | tournaments |
 | HU-16 | Q12 | `GET /api/torneos/por-fecha` | tournaments |

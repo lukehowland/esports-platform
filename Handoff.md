@@ -1,307 +1,418 @@
-# Handoff — Esports Platform: auth/RBAC, integridad y showcase live
+# Handoff - cierre RF-01 a RF-06 y continuidad del proyecto
 
-Fecha: 2026-06-17
-Repo: `/Users/lukesito/dev/src/github.com/lukehowland/esports-platform`
-Rama de trabajo: `codex/restrict-videogames-and-match-enrollment`
-Generado por: Claude + Codex
+Fecha: 2026-06-19
+Repositorio: `/Users/lukesito/dev/src/github.com/lukehowland/esports-platform`
+Rama actual: `feat/rf-fields-and-equipos-crud`
+Base: `377646e` (`origin/main`, PR #8 de RF-03)
+Checkpoint previo: `checkpoint/pre-rf-resto`
+Estado: cambios implementados y verificados, todavia sin commits en esta rama.
 
-Este handoff reemplaza al anterior de PR #6. Documenta el estado actual tras el merge del CRUD
-admin a `main` y la rama posterior de Codex para reforzar integridad de datos y agregar el
-showcase live del home público: videojuegos admin-only, partidas/premios solo para equipos
-inscritos, seed nuevo con Gen.G + `RIFT-LIVE26`, y endpoint efimero de partida en vivo.
+## Por que existe este handoff
 
----
+Claude se quedo sin limite mientras ejecutaba el plan de los requerimientos funcionales restantes y
+no pudo dejar un cierre. Codex reconstruyo el contexto leyendo el PDF entregado, el plan, la
+documentacion, el historial Git, el backend, el frontend, el seeder y los tests. Luego completo los
+huecos encontrados y verifico el proyecto desde una base Cassandra vacia.
 
-## ⚠️ ESTADO FINAL — QUÉ NO HACER AL RETOMAR
-
-- [ ] **NO reimplementar el CRUD admin.** Organizadores (edit/delete), videojuegos
-  (show-all + filtro por chips, crear/editar en modal compartido, delete), usuarios
-  (lista + alta-modal + baja) ya están completos y mergeados (PR #6, squash `1cffff3`).
-- [ ] **NO quitar el bloqueo 409 "block-on-dependents".** Borrar/editar un organizador o un
-  videojuego que **todavía tiene torneos** devuelve `409 ProblemDetails` a propósito. El detalle
-  del 409 se muestra en un toast en el frontend. Es regla de negocio, no un bug.
-- [ ] **NO permitir self-delete ni borrar el admin bootstrap.** `DELETE /api/auth/usuarios/{u}`
-  guarda contra borrarte a vos mismo y contra borrar el admin de arranque (409). La fila propia
-  está deshabilitada en la UI. Deliberado.
-- [ ] **NO permitir que organizadores administren videojuegos.** Videojuegos es catálogo global:
-  crear/editar/borrar queda reservado para `admin`. Los organizadores solo seleccionan
-  videojuegos existentes al crear torneos.
-- [ ] **NO permitir partidas ni premios de equipo sin inscripción.** Una partida solo puede
-  registrarse entre equipos inscritos en el torneo. Si un premio tiene `equipoId`, ese equipo debe
-  estar inscrito. Esto evita torneos con `Partidas (1)` y `Inscritos (0)`.
-- [ ] **NO volver a poner botones de mutación en páginas públicas.** El sitio `(public)` sigue
-  100% read-only (decisión de PR #4). Toda mutación vive en el workspace del rol dueño.
-- [ ] **NO agregar endpoints "list-all" al backend para jugadores/partidas/videojuegos.** Modelo
-  query-first (Chebotko) a propósito. Las vistas "Todos"/"Recientes" y el overall del panel se
-  componen en el **cliente** con `useQueries` (fan-out). Es la solución, no un parche.
-- [ ] **NO tocar el latch del modal de videojuegos.** `VideojuegoModal` mantiene su propio estado
-  `display` (con `useEffect`) para que el encabezado no parpadee a "Nuevo videojuego" durante la
-  animación de cierre del modo edición. Si lo quitás, vuelve el flash.
-- [ ] **NO reescribir la auth/RBAC del backend.** Intacta. Las nuevas rutas (PUT/DELETE orgs y
-  juegos, GET/DELETE usuarios) usan los mismos `[Authorize(Roles=...)]` y validación por servicio.
-- [ ] **NO asumir `node`/`npm` local.** Por seguridad no hay runtime fuera de Docker; el
-  type-check real es el `next build` dentro del build del contenedor frontend.
-- [ ] **NO cambiar los chips de país de `/jugadores` (Q2) a nombres completos.** El dato es
-  **ISO-2** (`KR`, `US`, `BR`). Consultar por nombre completo devuelve vacío.
-
----
+Este archivo reemplaza el handoff anterior, que describia una rama ya integrada y una suite vieja
+de 143 tests. La fuente versionada de los requerimientos entregados quedo en
+`docs/00-requerimientos-entregados.md`.
 
 ## Estado ejecutivo
 
-Stack completo levanta con un solo `docker compose up --build`. El workspace admin (`/panel`)
-ahora tiene CRUD completo y sin bugs: organizadores y videojuegos se pueden listar, crear, editar
-y borrar (con bloqueo 409 si tienen torneos); los usuarios se listan, registran y eliminan; el
-overview muestra KPIs reales (equipos, organizadores, torneos, partidas) y un bar chart de torneos
-por juego. El backend ganó los endpoints que faltaban (PUT/DELETE de orgs y juegos en
-`tournaments`; GET/DELETE de usuarios en `auth`). Sitio público sigue read-only, pero el home ahora
-consume un showcase visual de una partida T1 vs Gen.G simulada desde `matches`. En la rama
-`codex/restrict-videogames-and-match-enrollment`, la suite queda en 143 tests declarados y pasando:
-guardas para videojuegos admin-only, partidas/premios solo con equipos inscritos y showcase live.
+La rama completa los campos y flujos que faltaban para defender RF-01, RF-02, RF-04, RF-05 y
+RF-06 sin romper RF-03 ni Q1-Q24:
 
----
+- RF-01: jugadores con email y telefono, alta, edicion y eliminacion controlada.
+- RF-02: CRUD administrativo de equipos.
+- RF-03: codigo `J-001` y membresias temporales N:N ya integrados en `main`.
+- RF-04: videojuegos con plataforma obligatoria.
+- RF-05: organizadores con email obligatorio.
+- RF-06: torneos con fecha de inicio y fin, edicion y eliminacion controlada.
+- RF-07 a RF-11: permanecen cubiertos por los flujos existentes.
 
-## Estado verificado
+El build de produccion del frontend pasa, los servicios modificados publican correctamente y la
+suite limpia completa pasa `169/169`.
 
-Última verificación antes de este handoff:
+## Verificacion realizada
 
-```text
-git branch --show-current:
-codex/restrict-videogames-and-match-enrollment
+### Build sin cache
 
-git log --oneline -n 6 (base main ya mergeado con PR #6):
-1cefc5c test: add clean integration test runner
-bf02d08 docs: update authorization and handoff context
-6c546b4 fix(frontend): remove organizer game catalog access
-a5db54c fix(auth): enforce tournament participant rules
-1cffff3 feat(admin): complete CRUD for organizers, games and users (#6)
-c90593e docs(handoff): update for public/private surfaces and browse views (#5)
+Se ejecuto:
 
-Verificacion ejecutada en esta rama:
-docker compose build matches seeder frontend tests
-./scripts/test-clean.sh
-
-Resultado de tests:
-Total tests: 143
-Passed: 143
-
-Al terminar `./scripts/test-clean.sh`, el script restauró el stack demo limpio:
-frontend Started, seeder Exited (0), servicios reconstruidos desde cero.
-
-Casos nuevos clave:
-- premio a equipo no inscrito => 409
-- partida entre equipos no inscritos => 409
-- organizador/fan no pueden crear videojuegos => 403
-- `GET /api/partidas/en-vivo/destacada?elapsedSeconds=0` => T1 vs Gen.G 0-0
-- `GET /api/partidas/en-vivo/destacada?elapsedSeconds=300` => dragon de T1
-- `RIFT-LIVE26` tiene T1 y Gen.G inscritos, pero no partidas historicas ni premios
+```bash
+docker compose build --no-cache teams tournaments frontend seeder tests
 ```
 
-> Nota: `./scripts/test-clean.sh` hace `down -v`, corre la suite y vuelve a levantar una demo limpia.
-> Los UUID del seeder cambian en cada cold-boot; pedirlos a la API, no hardcodear.
+Resultado:
 
----
+- `teams` compilo y publico.
+- `tournaments` compilo y publico.
+- `seeder` compilo y publico.
+- la imagen de tests se construyo.
+- Next.js compilo, paso lint y type-check, y genero 23 rutas.
 
-## Qué se hizo en la sesión del PR #6 (admin CRUD)
+### Integracion desde cero
 
-Backend (cada servicio dueño valida JWT + ownership; errores RFC 7807):
+Se ejecuto:
 
-- **tournaments**: `PUT`/`DELETE` para organizadores y videojuegos. Editar/borrar cuando la
-  entidad **todavía tiene torneos** devuelve `409 ProblemDetails` (block-on-dependents). Se
-  introdujo `MutacionResultado` para llevar el resultado de dominio del service al controller
-  (éxito / no-encontrado / bloqueado) sin `throw` crudo.
-- **auth**: `GET /api/auth/usuarios` (admin) y `DELETE /api/auth/usuarios/{username}`. Guarda
-  contra self-delete y contra borrar el admin bootstrap (409).
+```bash
+./scripts/test-clean.sh
+```
 
-Frontend (workspace admin bajo `/panel`; las mutaciones viven acá, nunca en el sitio público):
+El script:
 
-- **`panel/organizadores/page.tsx`** — lista con diálogos de editar/borrar; se quitó el link roto
-  que renderizaba "not found"; el detalle del 409 (bloqueo por torneos) se muestra en un toast.
-- **`panel/videojuegos/page.tsx`** — muestra el catálogo completo primero y luego filtra por chips
-  de género; crear/editar en un **modal compartido** con `Select` de género; el modal mantiene su
-  contenido latcheado (`display` + `useEffect`) para que el encabezado no parpadee a "Nuevo" al
-  cerrar el modo edición.
-- **`panel/usuarios/page.tsx`** — lista real de usuarios con badges de rol y stats; alta como modal
-  (register) y baja (la fila propia está deshabilitada).
-- **`panel/page.tsx`** (overview) — KPIs reales (equipos, organizadores, torneos, partidas) y un
-  bar chart sin dependencias de torneos por juego; el overview de organizador rellena
-  partidas/premios vía fan-out.
-- **`panel/equipos/page.tsx`** — se evitó que la fila navegara fuera del panel (el "leak" del sidebar).
+1. hizo `docker compose down -v`;
+2. reconstruyo servicios e imagen de tests;
+3. creo esquemas desde cero;
+4. ejecuto el seeder;
+5. corrio toda la suite;
+6. elimino los datos producidos por tests;
+7. restauro una demo limpia y poblada.
 
-Tests: `AdminCrudTests.cs` (nuevo, 16 declaraciones) cubre los ciclos CRUD de org/juego/usuario y
-las rutas 401/403/404/409; `GatewayFixture.cs` ganó helpers de auth admin.
+Resultado final:
 
----
+```text
+Test Run Successful.
+Total tests: 169
+Passed: 169
+Failed: 0
+```
 
-## Dataset del seeder (crítico)
+En la primera pasada hubo un solo fallo heredado: un test afirmaba que no existia ningun
+`DELETE /api/equipos/{id}`. RF-02 ahora implementa esa ruta y, sin token, responde correctamente
+`401`. El test se actualizo para certificar el contrato nuevo y la segunda pasada quedo verde.
 
-Conteos esperados tras agregar Gen.G y `RIFT-LIVE26`:
+### Stack restaurado
+
+Al terminar la suite quedaron levantados y saludables:
+
+- Cassandra
+- RabbitMQ
+- auth
+- teams
+- tournaments
+- matches
+- ranking
+- gateway
+- frontend
+
+El seeder finalizo con codigo 0.
+
+### Verificacion visual
+
+Se recorrio el frontend real en Docker tanto en escritorio como en un viewport movil de
+390 x 844:
+
+- catalogo publico de videojuegos con plataforma;
+- organizadores publicos con email;
+- detalle de torneo con rango inicio-fin;
+- listado y detalle de jugadores con codigo, email y telefono;
+- login demo de admin;
+- CRUD de equipos;
+- formulario de creacion de torneo;
+- edicion de jugador con los datos completos;
+- administracion de videojuegos, organizadores y torneos.
+
+La primera pasada detecto que el sidebar fijo aplastaba el contenido en movil. Se corrigio el
+layout para usar navegacion horizontal desplazable en pantallas pequenas, los formularios
+colapsan a una columna y los dialogos respetan margen lateral. Se reconstruyo el frontend,
+Next.js volvio a pasar compilacion/lint/type-check y la segunda pasada no mostro solapamientos ni
+errores de consola.
+
+## Dataset limpio confirmado
+
+El ultimo seed restaurado reporto:
 
 ```text
 Equipos: 41
-Jugadores (suma de integrantes): 202
-Videojuegos: 5
-Organizadores: 7
 Torneos: 13
+Organizadores: 7
+Ranking equipos por torneos: 41
+Ranking equipos por victorias: 40
+Ranking jugadores activos: 50
 ```
 
-Videojuegos y su género (confirmado en /videojuegos):
+El dataset mantiene los juegos y torneos de LoL, CS2, Valorant, Dota 2 y Rocket League, incluido
+el showcase T1 vs Gen.G. Los UUID cambian despues de `down -v`; siempre deben resolverse por las
+APIs o por codigos/tags de negocio.
+
+Usuarios demo:
 
 ```text
-Dota 2            → MOBA
-League of Legends → MOBA
-Valorant          → FPS
-Counter-Strike 2  → FPS
-Rocket League     → SPORTS
+admin      / admin-dev-password
+org_riot   / OrgDemo2024
+cap_t1     / CapDemo2024
+fan_demo   / FanDemo2024
 ```
 
-Hechos no obvios (siguen vigentes):
-- **País se guarda como ISO-2** (`KR`, `US`, `BR`, `UA`, `CN`, `DE`, `FR`, `DK`…). Q2 espera el código.
-- **T1 tiene exactamente 3 jugadores explícitos**: Faker (MID), Gumayusi (ADC), Zeus (TOP).
-- **Gen.G existe como equipo LoL (`GEN`)** para el showcase live del home: Kiin, Canyon, Chovy,
-  Ruler y Duro.
-- **RIFT-LIVE26** es un torneo showcase de Riot Games con T1 y Gen.G inscritos. No genera partidas
-  históricas ni premios automaticos; la partida en vivo se expone por `matches` como estado
-  efimero (`GET /api/partidas/en-vivo/destacada`) para no alterar rankings/counters.
-- **UUID se regeneran en cada cold-boot** (`down -v`). No hardcodear IDs.
-- Organizadores (nombre exacto en Cassandra): `LoL Esports`, `PGL`, `Riot Games`,
-  `BLAST Premier`, `VALORANT Champions Tour`, `ESL FACEIT Group`, `UNIVALLE Esports`.
-- **Block-on-dependents**: un organizador o videojuego con torneos asociados NO se puede borrar ni
-  editar (409). Para probar el camino feliz de delete, crear uno nuevo sin torneos y borrarlo.
+Los patrones completos siguen siendo `org_<code>` y `cap_<tag>`.
 
-Usuarios demo (password fija, del seeder):
+## Cambios de backend
+
+### RF-01 - jugadores
+
+Campos nuevos y obligatorios:
+
+- `email`
+- `telefono`
+
+Rutas relevantes:
 
 ```text
-admin            / admin-dev-password
-org_<code>       / OrgDemo2024   (ej: org_riot, org_esl, org_vct)
-cap_<tag>        / CapDemo2024   (ej: cap_t1, cap_navi, cap_drg, cap_g2)
-fan_demo         / FanDemo2024
+POST   /api/equipos/{equipoId}/jugadores
+GET    /api/jugadores/{jugadorId}
+PUT    /api/jugadores/{jugadorId}
+DELETE /api/jugadores/{jugadorId}
 ```
 
----
+Reglas:
 
-## Archivos tocados en la sesión del PR #6
+- admin puede administrar cualquier jugador;
+- un capitan solo puede editar jugadores de su equipo;
+- eliminar es solo para admin;
+- un jugador con membresia activa no se elimina: devuelve `409`;
+- primero se libera, queda como agente libre y entonces puede eliminarse;
+- editar conserva el codigo legible e inmutable y actualiza todas las tablas desnormalizadas.
 
-Backend — tournaments:
-- `services/tournaments/Esports.Tournaments.Api/Controllers/OrganizadoresController.cs` — PUT/DELETE.
-- `services/tournaments/Esports.Tournaments.Api/Controllers/VideojuegosController.cs` — PUT/DELETE.
-- `services/tournaments/Esports.Tournaments.Api/Services/OrganizadorService.cs` — lógica + 409.
-- `services/tournaments/Esports.Tournaments.Api/Services/VideojuegoService.cs` — lógica + 409.
-- `services/tournaments/Esports.Tournaments.Api/Services/MutacionResultado.cs` — nuevo (resultado de dominio).
-- `services/tournaments/Esports.Tournaments.Api/Repositories/OrganizadorRepository.cs` — update/delete + conteo de torneos.
-- `services/tournaments/Esports.Tournaments.Api/Repositories/VideojuegoRepository.cs` — update/delete + conteo.
-- `services/tournaments/Esports.Tournaments.Api/Dtos/Dtos.cs` — DTOs de update.
+El frontend ya consulta el detalle completo antes de abrir la edicion; anteriormente intentaba
+editar desde un DTO de roster que no contenia email ni telefono.
 
-Backend — auth:
-- `services/auth/Esports.Auth.Api/Controllers/AuthController.cs` — GET/DELETE usuarios.
-- `services/auth/Esports.Auth.Api/Dtos/AuthDtos.cs` — DTO de listado.
-- `services/auth/Esports.Auth.Api/Repositories/IUsuarioRepository.cs` — firmas list/delete.
-- `services/auth/Esports.Auth.Api/Repositories/UsuarioRepository.cs` — implementación.
+### RF-02 - equipos
 
-Frontend (workspace admin):
-- `frontend/src/app/panel/organizadores/page.tsx` — edit/delete + toast 409.
-- `frontend/src/app/panel/videojuegos/page.tsx` — show-all + filtro + modal compartido + latch.
-- `frontend/src/app/panel/usuarios/page.tsx` — lista + alta-modal + baja.
-- `frontend/src/app/panel/page.tsx` — KPIs reales + bar chart + fan-out org.
-- `frontend/src/app/panel/equipos/page.tsx` — fix del leak de navegación.
-- `frontend/src/lib/api/auth.ts` — clientes list/delete usuarios.
-- `frontend/src/lib/api/torneos.ts` — clientes update/delete org y juego.
-
-Infra/tests:
-- `tests/Esports.Gateway.Tests/AdminCrudTests.cs` — nuevo (16 declaraciones).
-- `tests/Esports.Gateway.Tests/GatewayFixture.cs` — helpers de auth admin.
-- `.gitignore` — ignora `frontend/next-env.d.ts` (artefacto generado por Next).
-
----
-
-## Commits — ya en `origin/main`
+Rutas nuevas:
 
 ```text
-1cffff3 feat(admin): complete CRUD for organizers, games and users (#6)
+PUT    /api/equipos/{equipoId}
+DELETE /api/equipos/{equipoId}
 ```
 
-PR #6 mergeado por **squash**; la rama de feature fue borrada. `main` local quedó sincronizada con
-`origin/main` (fast-forward `c90593e..1cffff3`) al inicio de esta sesión de cierre.
+Reglas:
 
----
+- solo admin;
+- editar mantiene coherentes `equipos`, `equipos_por_fecha` y `equipo_por_tag`;
+- si cambia el tag, se elimina el indice viejo antes de escribir el nuevo;
+- borrar un equipo con roster activo devuelve `409`;
+- un equipo vacio puede editarse y eliminarse.
 
-## Decisiones tomadas (con justificación)
+Limitacion deliberada: `teams` no consulta keyspaces ajenos. El bloqueo comprobado por RF-02 es
+el roster activo dentro de `esports_teams`; no se introdujo una dependencia circular hacia
+`tournaments` para buscar historia o inscripciones externas.
 
-- **Block-on-dependents (409) en delete/edit de org y juego.** Razón: borrar un organizador o
-  videojuego con torneos vivos dejaría las tablas desnormalizadas (`torneos_por_organizador`,
-  `torneos_por_videojuego`) apuntando a un padre inexistente. Mejor rechazar con un 409 claro.
-- **`MutacionResultado` en vez de excepciones para el flujo de dominio.** Razón: el controller
-  mapea {ok, no-encontrado, bloqueado} a {200/204, 404, 409} con `ProblemDetails`, sin `throw`
-  crudo hacia el cliente (regla de oro del proyecto).
-- **Guardas de self-delete y admin-bootstrap en `auth`.** Razón: un admin no debe poder dejar el
-  sistema sin admin ni borrarse en caliente. Devuelve 409.
-- **Latch del modal de videojuegos (`display` + `useEffect`).** Razón: al cerrar el modo edición,
-  el prop `juego` pasa a `null` y el encabezado parpadeaba a "Nuevo videojuego" durante la
-  animación. El latch conserva el contenido hasta que el modal termina de cerrarse.
-- **Show-all-then-filter en videojuegos.** Razón: arrancar con un buscador vacío era confuso; se
-  muestra el catálogo completo (fan-out por género) y los chips filtran en memoria.
-- **KPIs y bar chart del overview compuestos en cliente (fan-out), sin endpoints nuevos.** Razón:
-  modelo query-first; agregar list-all rompería Chebotko.
-- **Merge por squash a `main`.** Razón: la rama tenía commits intermedios; squash deja la historia
-  de `main` con un commit lógico por PR.
+### RF-04 - videojuegos
 
----
+Campo nuevo y obligatorio:
 
-## Warnings conocidos (no bloqueantes)
+- `plataforma`
+
+Se persiste tanto en la tabla principal como en `videojuegos_por_genero`. Crear, editar y eliminar
+siguen siendo operaciones exclusivas de admin. Las entidades con torneos dependientes conservan
+el bloqueo `409`.
+
+### RF-05 - organizadores
+
+Campo nuevo y obligatorio:
+
+- `email`
+
+Se persiste en la tabla principal y en la lista desnormalizada. Crear, editar y eliminar siguen
+siendo operaciones exclusivas de admin. Los organizadores con torneos conservan el bloqueo `409`.
+
+### RF-06 - torneos
+
+Campo nuevo y obligatorio:
+
+- `fecha_fin`
+
+Rutas nuevas:
 
 ```text
-- SYSLIB0060: Rfc2898DeriveBytes constructor deprecated en PasswordService (deuda técnica).
-- NU1903: Newtonsoft.Json 9.0.1 advisory (transitiva de xunit, no controlable).
-- xUnit analyzer: algunos Assert.True deberían ser Assert.Contains.
-- El seeder corre en cada `up` y omite registros ya existentes ("ya existe (omitido)") — idempotente.
-- Micro-flash cosmético en el confirm-dialog de borrado (nombre/@ vacío durante la animación de
-  cierre). Decidido NO arreglar para evitar churn; es solo visual y no afecta el flujo.
+PUT    /api/torneos/{id}
+DELETE /api/torneos/{id}
 ```
 
----
+Reglas:
 
-## Siguiente fase — acción concreta
+- `fecha_fin` debe ser posterior a `fecha_inicio`;
+- admin puede administrar cualquier torneo;
+- organizador solo puede administrar torneos propios;
+- editar o borrar un torneo con inscripciones, partidas o premios devuelve `409`;
+- las mutaciones actualizan en BATCH las tablas desnormalizadas correspondientes;
+- el codigo del torneo permanece como llave de negocio estable.
 
-> El proyecto está funcionalmente completo según el Definition of Done. Lo que sigue es
-> opcional / a pedido del usuario.
+## Cambios de Cassandra y compatibilidad
 
-### Qué hacer (si el usuario lo pide)
-1. (Opcional) **CRUD de equipos en el panel admin.** Es lo único de CRUD que quedó diferido:
-   crear/editar/borrar equipo requiere denormalización cross-service event-driven (el equipo vive
-   en `teams` pero se referencia en inscripciones de `tournaments`). Diseñar el flujo de eventos
-   antes de tocar nada — no es un CRUD trivial de una tabla.
-2. (Opcional) Verificar por UI los flujos felices de mutación en cada workspace tras un cold-boot:
-   capitán inscribe/agrega jugador (201), organizador asigna premio/registra partida en
-   `/panel/torneos/[id]` propio (201), admin en cualquiera (201).
-3. (Opcional) Aplicar el patrón "default amable" a `/torneos` y `/organizadores` públicos si el
-   usuario reporta que arrancan vacíos (no verificado).
-4. (Opcional) Accesibilidad fina (focus por teclado, `prefers-reduced-motion`) en las vistas nuevas.
+Los `SchemaInitializer` siguen siendo idempotentes y ejecutan `CREATE ... IF NOT EXISTS`.
+Tambien agregan columnas de forma aditiva con `ALTER TABLE ... ADD` tolerando que ya existan:
 
-### Qué NO tocar
-- Backend `auth`/RBAC, seeder: estables y mergeados.
-- El bloqueo 409 block-on-dependents y las guardas de usuarios.
-- El modelo query-first: no agregar endpoints list-all.
-- El sistema de diseño HUD y la decisión de layout por rol.
+- jugadores: `email`, `telefono`;
+- videojuegos: `plataforma`;
+- organizadores: `email`;
+- torneos: `fecha_fin`.
 
-### Preguntas abiertas
-- Ninguna bloqueante. El CRUD de equipos es la única pieza grande pendiente y depende de si el
-  usuario lo quiere para la entrega.
+RF-03 mantiene:
 
----
+- `jugador_por_codigo`;
+- `membresias_por_jugador`;
+- `secuencias`;
+- roster activo en las tablas Q1-Q6;
+- una sola membresia activa por jugador.
 
-## Cómo retomar en 60 segundos
+No se cambio ninguna primary key de Cassandra ni se agregaron lecturas cross-keyspace.
+
+## Cambios de frontend
+
+### Sitio publico
+
+- detalle de jugador muestra email y telefono;
+- organizadores muestran email;
+- videojuegos muestran plataforma;
+- detalle de torneo muestra rango inicio-fin.
+
+### Admin
+
+- `/panel/equipos`: alta, listado, edicion y eliminacion con confirmacion;
+- `/panel/equipos/[id]`: edicion del equipo y administracion de roster;
+- `/panel/organizadores`: formularios con email;
+- `/panel/videojuegos`: formularios y tarjetas con plataforma;
+- `/panel/torneos/[id]`: edicion y eliminacion con fecha fin;
+- los mensajes `409` del backend se presentan al usuario.
+- el workspace es responsive: navegacion horizontal en movil y sidebar en escritorio.
+
+### Capitan
+
+- `/mi-equipo`: alta de jugador con contacto;
+- edicion de jugador carga primero el detalle real;
+- liberar y fichar agentes libres respeta RF-03;
+- eliminar agente libre pide confirmacion y queda reservado a admin.
+
+### Organizador
+
+- crear torneo exige fecha inicio y fecha fin;
+- editar/eliminar se limita al torneo propio por JWT y ownership del backend;
+- no puede crear videojuegos ni organizadores.
+
+## Cobertura de tests agregada o reforzada
+
+La suite cubre, entre otros:
+
+- email y telefono de jugador;
+- edicion de contacto;
+- eliminacion solo de agente libre;
+- ownership de capitan al editar jugador;
+- codigo de jugador e indices RF-03;
+- CRUD de equipo, cambio de tag y bloqueos `401/403/409`;
+- plataforma requerida;
+- email de organizador requerido;
+- fecha fin y validacion temporal;
+- edicion/eliminacion de torneo propio;
+- bloqueo de torneo con dependencias;
+- persistencia por codigo e indices desnormalizados;
+- RBAC de admin, organizador, capitan y fan;
+- Q1-Q24 y showcase live.
+
+Persisten cuatro warnings de analizadores xUnit por `Assert.True` heredados. No afectan el
+resultado de la suite.
+
+## Documentacion actualizada
+
+- `README.MD`
+- `USER-STORIES.md`
+- `docs/00-requerimientos-entregados.md`
+- `docs/01-arquitectura.md`
+- `docs/02-modelo-datos.md`
+- `docs/04-contratos-api.md`
+- `docs/decisiones/ADR-001-rf03-membresias.md`
+- `frontend/MANUAL-USUARIO.md`
+- `Handoff.md`
+
+La matriz de `docs/00-requerimientos-entregados.md` debe usarse durante la defensa para recorrer
+RF por RF y luego Q1-Q24.
+
+## Archivos de implementacion modificados
+
+Backend `teams`:
+
+- schema, dominio y DTOs de jugadores/equipos;
+- controladores de equipos y jugadores;
+- repositorios de equipo y jugador;
+- servicios de equipo y jugador;
+- `MutacionResultado` y extension de `MovimientoResultado`.
+
+Backend `tournaments`:
+
+- schema y modelos;
+- DTOs de videojuego, organizador y torneo;
+- controladores de organizadores y torneos;
+- repositorios y servicios de videojuegos, organizadores y torneos.
+
+Frontend:
+
+- clientes API de equipos y torneos;
+- superficies publicas de jugador, organizador, videojuego y torneo;
+- paneles de equipos, organizadores, videojuegos y torneos;
+- creacion de torneo;
+- `RosterManager`;
+- manual de usuario.
+
+Datos y pruebas:
+
+- `tools/Esports.Seeder/Program.cs`;
+- `AdminCrudTests.cs`;
+- `AuthTests.cs`;
+- `ErrorTests.cs`;
+- `TeamsTests.cs`;
+- `TournamentsTests.cs`.
+
+## Lo que no se debe deshacer
+
+- No volver al modelo de un jugador pegado para siempre a un solo equipo.
+- No permitir dos membresias activas simultaneas.
+- No hacer editable el codigo `J-001`.
+- No borrar jugadores con equipo activo.
+- No borrar equipos con roster activo.
+- No borrar o editar catalogos con torneos dependientes.
+- No permitir torneos con fecha fin anterior o igual al inicio.
+- No mover autorizacion al gateway ni confiar solo en ocultar botones.
+- No escribir keyspaces de otros servicios.
+- No convertir tablas counter de ranking a `INSERT`.
+- No hardcodear UUID del seeder.
+
+## Trabajo pendiente inmediato
+
+1. Revisar `git diff` y separar commits atomicos conforme a `docs/08-commits.md`.
+2. Crear PR de `feat/rf-fields-and-equipos-crud` hacia `main`.
+3. Preparar una hoja de defensa RF-01 a RF-11 y Q1-Q24 usando la matriz versionada.
+
+Propuesta de commits atomicos:
+
+```text
+feat(teams): complete player and team management requirements
+feat(tournaments): add required fields and tournament lifecycle
+feat(frontend): expose RF management fields and workflows
+test(gateway): cover remaining functional requirements
+docs: align requirements, contracts and user guidance
+```
+
+## Comandos para retomar
 
 ```bash
-cd /Users/lukesito/dev/src/github.com/lukehowland/esports-platform
-git status --short --branch          # esperado: rama codex/restrict-videogames-and-match-enrollment
-git log --oneline --decorate -n 8    # HEAD debe incluir 1cffff3 y commits de integridad
-docker compose up --build -d
-docker compose ps --all              # todos healthy, seeder Exited (0)
-docker compose logs --tail=30 seeder
+git status --short --branch
+docker compose ps
+./scripts/test-clean.sh
+docker compose logs --tail=100 seeder
 ```
 
-Estado deseado al retomar:
-- Rama `codex/restrict-videogames-and-match-enrollment`, basada en `main` con PR #6 mergeado.
-- Stack arriba y healthy, seeder `Exited (0)`.
-- Frontend en `http://localhost:3000`: público read-only con vistas "Todos"/"Recientes" y showcase
-  live T1 vs Gen.G; workspace admin (`/panel`) con CRUD completo de organizadores/videojuegos/usuarios.
-- Backend auth/RBAC listo y testeado; suite limpia `143/143` pasando con `./scripts/test-clean.sh`.
+URLs:
+
+```text
+Frontend:  http://localhost:3000
+Gateway:   http://localhost:8080
+Swagger:   http://localhost:5001/swagger ... http://localhost:5005/swagger
+RabbitMQ:  http://localhost:15672
+```
+
+## Estado Git que debe esperarse
+
+Todos los cambios de esta rama siguen sin commit para preservar exactamente el trabajo recuperado.
+No hacer reset ni checkout destructivo. Revisar y agrupar por dominio antes de commitear.

@@ -7,6 +7,8 @@ namespace Esports.Teams.Api.Services;
 public interface IEquipoService
 {
     Task<EquipoResponse> CrearEquipoAsync(CrearEquipoRequest request);
+    Task<MutacionResultado> ActualizarEquipoAsync(Guid equipoId, EditarEquipoRequest request);
+    Task<MutacionResultado> EliminarEquipoAsync(Guid equipoId);
     Task<EquipoResponse?> ObtenerPorIdAsync(Guid equipoId);
     Task<JugadorResponse> AgregarJugadorAsync(Guid equipoId, AgregarJugadorRequest request);
     Task<IEnumerable<EquipoResponse>> ObtenerPorFechaAsync();
@@ -48,6 +50,40 @@ public class EquipoService : IEquipoService
         return new EquipoResponse(equipo.EquipoId, equipo.Nombre, equipo.Tag, equipo.Pais, equipo.FechaCreacion);
     }
 
+    public async Task<MutacionResultado> ActualizarEquipoAsync(Guid equipoId, EditarEquipoRequest request)
+    {
+        var original = await _equipoRepo.ObtenerPorIdAsync(equipoId);
+        if (original is null) return MutacionResultado.NoEncontrado;
+
+        // Block-on-dependents: el nombre/tag del equipo está desnormalizado en otros servicios
+        // (inscripciones, partidas, premios, membresías). Solo se edita sin roster.
+        if (await _equipoRepo.TieneIntegrantesAsync(equipoId))
+            return MutacionResultado.ConDependencias;
+
+        var nuevo = new Equipo
+        {
+            EquipoId = equipoId,
+            Nombre = request.Nombre.Trim(),
+            Tag = request.Tag.Trim().ToUpperInvariant(),
+            Pais = request.Pais.Trim().ToUpperInvariant(),
+            FechaCreacion = original.FechaCreacion
+        };
+        await _equipoRepo.ActualizarAsync(original, nuevo);
+        return MutacionResultado.Ok;
+    }
+
+    public async Task<MutacionResultado> EliminarEquipoAsync(Guid equipoId)
+    {
+        var equipo = await _equipoRepo.ObtenerPorIdAsync(equipoId);
+        if (equipo is null) return MutacionResultado.NoEncontrado;
+
+        if (await _equipoRepo.TieneIntegrantesAsync(equipoId))
+            return MutacionResultado.ConDependencias;
+
+        await _equipoRepo.EliminarAsync(equipo);
+        return MutacionResultado.Ok;
+    }
+
     public async Task<JugadorResponse> AgregarJugadorAsync(Guid equipoId, AgregarJugadorRequest request)
     {
         var equipo = await _equipoRepo.ObtenerPorIdAsync(equipoId)
@@ -62,6 +98,8 @@ public class EquipoService : IEquipoService
             Nombre = request.Nombre.Trim(),
             Pais = request.Pais.Trim().ToUpperInvariant(),
             Rol = request.Rol.Trim().ToUpperInvariant(),
+            Email = request.Email.Trim(),
+            Telefono = request.Telefono.Trim(),
             EquipoId = equipoId,
             FechaRegistro = ahora
         };
@@ -79,7 +117,7 @@ public class EquipoService : IEquipoService
         };
 
         await _jugadorRepo.AgregarJugadorAsync(jugador, membresia);
-        return new JugadorResponse(jugador.JugadorId, jugador.Codigo, jugador.Nickname, jugador.Nombre, jugador.Pais, jugador.Rol, jugador.EquipoId);
+        return new JugadorResponse(jugador.JugadorId, jugador.Codigo, jugador.Nickname, jugador.Nombre, jugador.Pais, jugador.Rol, jugador.Email, jugador.Telefono, jugador.EquipoId);
     }
 
     public Task<IEnumerable<EquipoResponse>> ObtenerPorFechaAsync() => _equipoRepo.ObtenerPorFechaAsync();

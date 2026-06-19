@@ -60,7 +60,7 @@ El modelo original es 100% tablas de consulta y no tiene una "tabla por id" dond
 
 | Keyspace | Tablas |
 |---|---|
-| `esports_teams` | `jugadores`*, `equipos`*, `jugadores_por_nickname` (Q1), `jugadores_por_pais` (Q2), `jugadores_por_equipo` (Q3), `equipos_por_fecha` (Q4), `equipos_por_tag` (Q5), `integrantes_por_equipo` (Q6) |
+| `esports_teams` | `jugadores`*, `equipos`*, `jugadores_por_nickname` (Q1), `jugadores_por_pais` (Q2), `jugadores_por_equipo` (Q3), `equipos_por_fecha` (Q4), `equipos_por_tag` (Q5), `integrantes_por_equipo` (Q6), `jugador_por_codigo` (RF-03), `membresias_por_jugador` (RF-03), `secuencias` (RF-03) |
 | `esports_tournaments` | `videojuegos`*, `organizadores`*, `torneos`*, `videojuegos_por_genero` (Q8), `torneos_por_videojuego` (Q9), `organizadores_lista` (Q10), `torneos_por_organizador` (Q11), `torneos_por_fecha` (Q12), `equipos_por_torneo` (Q13), `torneos_por_equipo` (Q14), `torneo_por_codigo` (Q15), `premios_por_torneo` (Q20), `premios_por_equipo` (Q21) |
 | `esports_matches` | `partidas`*, `partidas_por_torneo` (Q16), `partidas_por_equipo` (Q17), `partidas_por_fecha` (Q18), `partidas_por_rivales` (Q19) |
 | `esports_ranking` | `ranking_equipos_global` (Q7), `ranking_victorias` (Q22), `ranking_jugadores_activos` (Q23), `stats_equipo_por_torneo` (Q24) |
@@ -110,9 +110,13 @@ CREATE KEYSPACE IF NOT EXISTS esports_teams
 -- Base: jugador por id
 CREATE TABLE IF NOT EXISTS esports_teams.jugadores (
     jugador_id     uuid,
+    codigo         text,
     nickname       text,
     nombre         text,
     pais           text,
+    rol            text,
+    email          text,
+    telefono       text,
     equipo_id      uuid,
     fecha_registro timestamp,
     PRIMARY KEY (jugador_id)
@@ -132,8 +136,12 @@ CREATE TABLE IF NOT EXISTS esports_teams.equipos (
 CREATE TABLE IF NOT EXISTS esports_teams.jugadores_por_nickname (
     nickname   text,
     jugador_id uuid,
+    codigo     text,
     nombre     text,
     pais       text,
+    rol        text,
+    email      text,
+    telefono   text,
     equipo_id  uuid,
     PRIMARY KEY (nickname)
 );
@@ -142,8 +150,10 @@ CREATE TABLE IF NOT EXISTS esports_teams.jugadores_por_nickname (
 CREATE TABLE IF NOT EXISTS esports_teams.jugadores_por_pais (
     pais       text,
     jugador_id uuid,
+    codigo     text,
     nickname   text,
     nombre     text,
+    rol        text,
     equipo_id  uuid,
     PRIMARY KEY ((pais), jugador_id)
 ) WITH CLUSTERING ORDER BY (jugador_id ASC);
@@ -153,8 +163,10 @@ CREATE TABLE IF NOT EXISTS esports_teams.jugadores_por_equipo (
     equipo_id  uuid,
     pais       text,
     jugador_id uuid,
+    codigo     text,
     nickname   text,
     nombre     text,
+    rol        text,
     PRIMARY KEY ((equipo_id), pais, jugador_id)
 ) WITH CLUSTERING ORDER BY (pais ASC, jugador_id ASC);
 
@@ -182,12 +194,45 @@ CREATE TABLE IF NOT EXISTS esports_teams.equipos_por_tag (
 CREATE TABLE IF NOT EXISTS esports_teams.integrantes_por_equipo (
     equipo_id  uuid,
     jugador_id uuid,
+    codigo     text,
     nickname   text,
     nombre     text,
     pais       text,
     rol        text,
     PRIMARY KEY ((equipo_id), jugador_id)
 ) WITH CLUSTERING ORDER BY (jugador_id ASC);
+
+-- RF-03: lookup por código legible e inmutable (J-001)
+CREATE TABLE IF NOT EXISTS esports_teams.jugador_por_codigo (
+    codigo     text,
+    jugador_id uuid,
+    nickname   text,
+    nombre     text,
+    pais       text,
+    rol        text,
+    email      text,
+    telefono   text,
+    equipo_id  uuid,
+    PRIMARY KEY (codigo)
+);
+
+-- RF-03: relación N:N temporal jugador-equipo
+CREATE TABLE IF NOT EXISTS esports_teams.membresias_por_jugador (
+    jugador_id    uuid,
+    fecha_desde   timestamp,
+    equipo_id     uuid,
+    nombre_equipo text,
+    tag_equipo    text,
+    rol           text,
+    fecha_hasta   timestamp,
+    PRIMARY KEY ((jugador_id), fecha_desde, equipo_id)
+) WITH CLUSTERING ORDER BY (fecha_desde DESC, equipo_id ASC);
+
+CREATE TABLE IF NOT EXISTS esports_teams.secuencias (
+    nombre text,
+    valor  int,
+    PRIMARY KEY (nombre)
+);
 ```
 
 ### esports_tournaments
@@ -200,6 +245,7 @@ CREATE TABLE IF NOT EXISTS esports_tournaments.videojuegos (
     videojuego_id uuid,
     nombre        text,
     genero        text,
+    plataforma    text,
     PRIMARY KEY (videojuego_id)
 );
 
@@ -207,6 +253,7 @@ CREATE TABLE IF NOT EXISTS esports_tournaments.videojuegos (
 CREATE TABLE IF NOT EXISTS esports_tournaments.organizadores (
     organizador_id uuid,
     nombre         text,
+    email          text,
     PRIMARY KEY (organizador_id)
 );
 
@@ -220,6 +267,7 @@ CREATE TABLE IF NOT EXISTS esports_tournaments.torneos (
     organizador_id     uuid,
     nombre_organizador text,
     fecha_inicio       timestamp,
+    fecha_fin          timestamp,
     PRIMARY KEY (torneo_id)
 );
 
@@ -228,6 +276,7 @@ CREATE TABLE IF NOT EXISTS esports_tournaments.videojuegos_por_genero (
     genero        text,
     videojuego_id uuid,
     nombre        text,
+    plataforma    text,
     PRIMARY KEY ((genero), videojuego_id)
 ) WITH CLUSTERING ORDER BY (videojuego_id ASC);
 
@@ -246,6 +295,7 @@ CREATE TABLE IF NOT EXISTS esports_tournaments.organizadores_lista (
     bucket         text,
     organizador_id uuid,
     nombre         text,
+    email          text,
     PRIMARY KEY ((bucket), organizador_id)
 ) WITH CLUSTERING ORDER BY (organizador_id ASC);
 

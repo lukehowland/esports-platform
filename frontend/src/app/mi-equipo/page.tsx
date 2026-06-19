@@ -26,6 +26,8 @@ const jugadorSchema = z.object({
   nombre:   z.string().min(1, "Requerido"),
   pais:     z.string().length(2, "Código ISO-2"),
   rol:      z.string().min(1, "Requerido"),
+  email:    z.string().email("Email inválido"),
+  telefono: z.string().min(1, "Requerido"),
 });
 type JugadorForm = z.infer<typeof jugadorSchema>;
 
@@ -176,6 +178,16 @@ export default function MiEquipoPage() {
                   <Label className="eyebrow">Rol en equipo</Label>
                   <Input placeholder="AWP / IGL / FLEX…" {...register("rol")} />
                   {errors.rol && <p className="text-xs text-destructive">{errors.rol.message}</p>}
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="eyebrow">Email</Label>
+                  <Input placeholder="jugador@equipo.gg" {...register("email")} />
+                  {errors.email && <p className="text-xs text-destructive">{errors.email.message}</p>}
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="eyebrow">Teléfono</Label>
+                  <Input placeholder="+1-555-0100" {...register("telefono")} />
+                  {errors.telefono && <p className="text-xs text-destructive">{errors.telefono.message}</p>}
                 </div>
               </div>
               {addError && (

@@ -55,6 +55,8 @@ public class SchemaInitializer
                     nombre         text,
                     pais           text,
                     rol            text,
+                    email          text,
+                    telefono       text,
                     equipo_id      uuid,
                     fecha_registro timestamp,
                     PRIMARY KEY (jugador_id)
@@ -80,6 +82,8 @@ public class SchemaInitializer
                     nombre     text,
                     pais       text,
                     rol        text,
+                    email      text,
+                    telefono   text,
                     equipo_id  uuid,
                     PRIMARY KEY (nickname)
                 )"));
@@ -154,6 +158,8 @@ public class SchemaInitializer
                     nombre     text,
                     pais       text,
                     rol        text,
+                    email      text,
+                    telefono   text,
                     equipo_id  uuid,
                     PRIMARY KEY (codigo)
                 )"));
@@ -183,16 +189,25 @@ public class SchemaInitializer
             // Volúmenes existentes: agregar la columna 'codigo' de forma idempotente
             // (CREATE ... IF NOT EXISTS no toca tablas ya creadas). Cassandra falla si la
             // columna ya existe; se ignora ese caso.
-            foreach (var tabla in new[] { "jugadores", "jugadores_por_nickname", "jugadores_por_pais", "jugadores_por_equipo", "integrantes_por_equipo" })
+            var altersIdempotentes = new[]
             {
-                try
-                {
-                    await session.ExecuteAsync(new SimpleStatement($"ALTER TABLE {tabla} ADD codigo text"));
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogDebug("ALTER TABLE {Tabla} ADD codigo omitido (probablemente ya existe): {Msg}", tabla, ex.Message);
-                }
+                "ALTER TABLE jugadores ADD codigo text",
+                "ALTER TABLE jugadores_por_nickname ADD codigo text",
+                "ALTER TABLE jugadores_por_pais ADD codigo text",
+                "ALTER TABLE jugadores_por_equipo ADD codigo text",
+                "ALTER TABLE integrantes_por_equipo ADD codigo text",
+                // RF-01: email/telefono donde se almacenan (base + Q1 + por-codigo)
+                "ALTER TABLE jugadores ADD email text",
+                "ALTER TABLE jugadores ADD telefono text",
+                "ALTER TABLE jugadores_por_nickname ADD email text",
+                "ALTER TABLE jugadores_por_nickname ADD telefono text",
+                "ALTER TABLE jugador_por_codigo ADD email text",
+                "ALTER TABLE jugador_por_codigo ADD telefono text",
+            };
+            foreach (var alt in altersIdempotentes)
+            {
+                try { await session.ExecuteAsync(new SimpleStatement(alt)); }
+                catch (Exception ex) { _logger.LogDebug("{Alt} omitido (probablemente ya existe): {Msg}", alt, ex.Message); }
             }
 
             _logger.LogInformation("Schema for keyspace {Keyspace} initialized successfully.", keyspace);

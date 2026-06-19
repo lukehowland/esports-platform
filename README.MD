@@ -1,6 +1,6 @@
-# Esports Platform — Backend
+# Esports Platform
 
-Backend de gestión de torneos de eSports. Arquitectura de microservicios .NET 10 sobre Apache Cassandra, con mensajería RabbitMQ y API Gateway YARP.
+Plataforma web de gestión de torneos de eSports. Frontend Next.js y microservicios .NET 10 sobre Apache Cassandra, con RabbitMQ, JWT/RBAC y API Gateway YARP.
 
 ## Requisitos
 
@@ -35,6 +35,7 @@ El seeder corre automaticamente en cada arranque limpio y carga datos realistas 
 
 | Servicio | URL |
 |---|---|
+| **Frontend** | http://localhost:3000 |
 | **API Gateway** (frontend) | http://localhost:8080 |
 | Swagger — teams | http://localhost:5001/swagger |
 | Swagger — tournaments | http://localhost:5002/swagger |
@@ -92,9 +93,21 @@ GET  /api/ranking/jugadores?top=10                   Q23
 GET  /api/stats/equipo/{equipoId}/torneo/{torneoId}  Q24
 ```
 
+Las mutaciones que completan RF-01–RF-06 incluyen:
+
+- `PUT/DELETE /api/jugadores/{id}` y membresías `liberar/asignar`.
+- `PUT/DELETE /api/equipos/{id}`.
+- `POST/PUT/DELETE /api/videojuegos` con `plataforma`.
+- `POST/PUT/DELETE /api/organizadores` con `email`.
+- `POST/PUT/DELETE /api/torneos` con `fechaInicio` y `fechaFin`.
+
+La trazabilidad completa RF → endpoint → pantalla está en
+[`docs/00-requerimientos-entregados.md`](docs/00-requerimientos-entregados.md).
+
 ## Tests de integración
 
-El proyecto incluye 143 tests de integración que verifican Q1–Q24, casos de error, autorización por rol/ownership y el showcase live a través del gateway.
+El proyecto incluye 169 tests de integración declarados que verifican RF-01–RF-11, Q1–Q24,
+casos de error, autorización por rol/ownership y el showcase live a través del gateway.
 
 **Comando recomendado:** usar el runner limpio. Este comando baja el stack, corre tests contra una base recien sembrada y al terminar vuelve a levantar el stack demo limpio para que el frontend muestre solo datos del seeder.
 
@@ -108,6 +121,7 @@ Los tests cubren:
 - Q1–Q24: todos los endpoints de lectura con resultados esperados exactos
 - Casos de error: 404, 400, cuerpos inválidos, GUIDs inexistentes, métodos HTTP incorrectos
 - Auth: login, `/api/auth/me`, lecturas públicas, `401` sin token y `403` por rol/ownership incorrecto
+- RF-01–RF-06: campos requeridos, CRUD, membresías temporales y bloqueos `409`
 - Invariantes: orden descendente en rankings, bidireccionalidad en Q19, suma `victorias + derrotas = partidas_jugadas`
 - Showcase live: T1 vs Gen.G arranca 0-0, dura 30 minutos y al minuto 5 incluye dragon de T1
 

@@ -28,6 +28,7 @@ const schema = z.object({
   videojuegoId:  z.string().min(1, "Seleccioná un videojuego"),
   organizadorId: z.string().min(1, "Requerido"),
   fechaInicio:   z.string().min(1, "Requerido"),
+  fechaFin:      z.string().min(1, "Requerido"),
 });
 type Form = z.infer<typeof schema>;
 
@@ -69,7 +70,11 @@ function CrearTorneoContent() {
 
   const mutation = useMutation({
     mutationFn: ({ genero: _, ...data }: Form) =>
-      crearTorneo({ ...data, fechaInicio: new Date(data.fechaInicio).toISOString() }),
+      crearTorneo({
+        ...data,
+        fechaInicio: new Date(data.fechaInicio).toISOString(),
+        fechaFin: new Date(data.fechaFin).toISOString(),
+      }),
     onSuccess: (torneo) => {
       toast.success("Torneo creado");
       qc.invalidateQueries({ queryKey: ["torneos"] });
@@ -93,8 +98,8 @@ function CrearTorneoContent() {
         <HudEyebrow className="block mb-4">datos del torneo</HudEyebrow>
         <form onSubmit={handleSubmit((d) => mutation.mutate(d))} className="space-y-4">
 
-          <div className="grid grid-cols-2 gap-4">
-            <div className="col-span-2 space-y-1.5">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div className="space-y-1.5 sm:col-span-2">
               <Label className="eyebrow">Nombre del torneo</Label>
               <Input placeholder="Copa UNIVALLE 2026" {...register("nombre")} />
               {errors.nombre && <p className="text-xs text-destructive">{errors.nombre.message}</p>}
@@ -108,6 +113,11 @@ function CrearTorneoContent() {
               <Label className="eyebrow">Fecha de inicio</Label>
               <Input type="datetime-local" {...register("fechaInicio")} />
               {errors.fechaInicio && <p className="text-xs text-destructive">{errors.fechaInicio.message}</p>}
+            </div>
+            <div className="space-y-1.5">
+              <Label className="eyebrow">Fecha de fin</Label>
+              <Input type="datetime-local" {...register("fechaFin")} />
+              {errors.fechaFin && <p className="text-xs text-destructive">{errors.fechaFin.message}</p>}
             </div>
           </div>
 

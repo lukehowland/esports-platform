@@ -22,15 +22,15 @@ public class OrganizadorService : IOrganizadorService
 
     public async Task<OrganizadorResponse> CrearAsync(CrearOrganizadorRequest req)
     {
-        var o = new Organizador { OrganizadorId = Guid.NewGuid(), Nombre = req.Nombre.Trim() };
+        var o = new Organizador { OrganizadorId = Guid.NewGuid(), Nombre = req.Nombre.Trim(), Email = req.Email.Trim() };
         await _repo.CrearAsync(o);
-        return new OrganizadorResponse(o.OrganizadorId, o.Nombre);
+        return new OrganizadorResponse(o.OrganizadorId, o.Nombre, o.Email);
     }
 
     public async Task<OrganizadorResponse?> ObtenerPorIdAsync(Guid id)
     {
         var o = await _repo.ObtenerPorIdAsync(id);
-        return o is null ? null : new OrganizadorResponse(o.OrganizadorId, o.Nombre);
+        return o is null ? null : new OrganizadorResponse(o.OrganizadorId, o.Nombre, o.Email);
     }
 
     public Task<IEnumerable<OrganizadorResponse>> ObtenerTodosAsync()
@@ -49,7 +49,7 @@ public class OrganizadorService : IOrganizadorService
         if (await _repo.TieneTorneosAsync(id))
             return MutacionResultado.ConDependencias;
 
-        await _repo.ActualizarAsync(id, req.Nombre.Trim());
+        await _repo.ActualizarAsync(id, req.Nombre.Trim(), req.Email.Trim());
         return MutacionResultado.Ok;
     }
 

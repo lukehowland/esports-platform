@@ -42,18 +42,21 @@ queries. Las 5 tablas de `esports_teams` quedan como "roster activo".
   `jugadores_por_pais`, `jugadores_por_equipo`, `integrantes_por_equipo`) quedan como "roster
   activo"; `codigo` es columna nueva; `equipo_id` pasa a nullable (agente libre).
 - Nuevas tablas: `membresias_por_jugador`, `jugador_por_codigo`, `secuencias`.
-- Q1–Q24 sin cambios; los 143 tests deben seguir verdes.
+- Q1–Q24 sin cambios; la suite completa debe seguir verde.
 
-## Estado del resto de los RF (se harán DESPUÉS de validar este al 100%)
+## Estado posterior de los RF relacionados
 
-- RF-01 Jugadores: agregar `email` + `telefono`; alta independiente + editar/eliminar. PARCIAL.
-- RF-02 Equipos: CRUD admin (PUT/DELETE backend + UI). NO CUMPLE — máxima prioridad siguiente.
-- RF-04 Videojuegos: agregar `plataforma`. PARCIAL.
-- RF-05 Organizadores: agregar `email`. PARCIAL.
-- RF-06 Torneos: agregar `fecha_fin`. PARCIAL.
-- RF-07..RF-11: cumplen.
+RF-03 se implementó y validó primero. La rama
+`feat/rf-fields-and-equipos-crud` completa después, sin modificar la decisión de membresías:
+
+- RF-01 Jugadores: `email` + `telefono`, alta, edición y eliminación con reglas de integridad.
+- RF-02 Equipos: CRUD administrativo con bloqueo `409` si existe roster activo.
+- RF-04 Videojuegos: `plataforma` requerida en backend, seed y UI.
+- RF-05 Organizadores: `email` requerido en backend, seed y UI.
+- RF-06 Torneos: `fecha_fin`, edición y eliminación con ownership y bloqueos por dependencias.
+- RF-07..RF-11: permanecen cubiertos.
 
 ## Validación de esta decisión
 
-`./scripts/test-clean.sh` (143 existentes + nuevos verdes) + pasada Chrome de RF-03 y Q1–Q24.
-Mientras no esté 100% verde y sin regresiones, no se avanza a los otros RF.
+El 19 de junio de 2026 se ejecutó `./scripts/test-clean.sh` desde volúmenes vacíos:
+`169/169` tests pasaron y el script restauró el stack demo con seeder exitoso.

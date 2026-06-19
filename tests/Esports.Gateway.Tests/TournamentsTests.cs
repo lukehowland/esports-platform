@@ -330,4 +330,102 @@ public class TournamentsTests(GatewayFixture fix, ITestOutputHelper output)
         var arr = GatewayFixture.ParseJson(await r.Content.ReadAsStringAsync());
         Assert.Equal(0, arr.GetArrayLength());
     }
+
+    // ─── RF-05/04/06: campos nuevos + editar/eliminar torneo ────────────────────
+
+    [Fact]
+    public async Task RF05_Organizadores_TienenEmail()
+    {
+        var r = await fix.Http.GetAsync("/api/organizadores");
+        var arr = GatewayFixture.ParseJson(await r.Content.ReadAsStringAsync());
+        Assert.All(arr.EnumerateArray(), o => Assert.False(string.IsNullOrWhiteSpace(o.GetProperty("email").GetString())));
+    }
+
+    [Fact]
+    public async Task RF04_Videojuegos_TienenPlataforma()
+    {
+        var r = await fix.Http.GetAsync("/api/videojuegos/por-genero/MOBA");
+        var arr = GatewayFixture.ParseJson(await r.Content.ReadAsStringAsync());
+        Assert.True(arr.GetArrayLength() >= 1);
+        Assert.All(arr.EnumerateArray(), v => Assert.False(string.IsNullOrWhiteSpace(v.GetProperty("plataforma").GetString())));
+    }
+
+    [Fact]
+    public async Task RF06_Torneo_TieneFechaFin()
+    {
+        var r = await fix.Http.GetAsync($"/api/torneos/{fix.WorldsId}");
+        var doc = GatewayFixture.ParseJson(await r.Content.ReadAsStringAsync());
+        Assert.True(doc.TryGetProperty("fechaFin", out var ff));
+        Assert.NotEqual(default, ff.GetDateTimeOffset());
+    }
+
+    [Fact]
+    public async Task RF06_CrearTorneo_FechaFinAntesDeInicio_Devuelve400()
+    {
+        var inicio = DateTimeOffset.UtcNow;
+        var r = await fix.AdminPost("/api/torneos", new
+        {
+            nombre = "Fechas inválidas", codigo = $"BAD{Guid.NewGuid():N}"[..10],
+            videojuegoId = fix.LoLId, organizadorId = fix.RIOTId,
+            fechaInicio = inicio, fechaFin = inicio.AddDays(-1)
+        });
+        Assert.Equal(HttpStatusCode.BadRequest, r.StatusCode);
+    }
+
+    private async Task<(Guid Id, DateTimeOffset Inicio)> CrearTorneoAsync()
+    {
+        var codigo = $"T{Guid.NewGuid():N}"[..10].ToUpperInvariant();
+        var inicio = DateTimeOffset.UtcNow;
+        var r = await fix.AdminPost("/api/torneos", new
+        {
+            nombre = $"Test Torneo {codigo}", codigo,
+            videojuegoId = fix.LoLId, organizadorId = fix.RIOTId,
+            fechaInicio = inicio, fechaFin = inicio.AddDays(5)
+        });
+        r.EnsureSuccessStatusCode();
+        return (GatewayFixture.ParseJson(await r.Content.ReadAsStringAsync()).GetProperty("torneoId").GetGuid(), inicio);
+    }
+
+    [Fact]
+    public async Task RF06_EditarYEliminarTorneoSinDependientes_Funciona()
+    {
+        var (id, inicio) = await CrearTorneoAsync();
+
+        var put = await fix.AdminPut($"/api/torneos/{id}", new { nombre = "Torneo Editado", fechaFin = inicio.AddDays(9) });
+        Assert.Equal(HttpStatusCode.OK, put.StatusCode);
+        Assert.Equal("Torneo Editado", GatewayFixture.ParseJson(await put.Content.ReadAsStringAsync()).GetProperty("nombre").GetString());
+
+        var codigo = GatewayFixture.ParseJson(await put.Content.ReadAsStringAsync()).GetProperty("codigo").GetString();
+        var porCodigo = await fix.Http.GetAsync($"/api/torneos/por-codigo/{codigo}");
+        Assert.Equal("Torneo Editado",
+            GatewayFixture.ParseJson(await porCodigo.Content.ReadAsStringAsync()).GetProperty("nombre").GetString());
+
+        var del = await fix.AdminDelete($"/api/torneos/{id}");
+        Assert.Equal(HttpStatusCode.NoContent, del.StatusCode);
+    }
+
+    [Fact]
+    public async Task RF06_EditarTorneoConInscritos_Devuelve409()
+    {
+        // WORLDS25 tiene equipos inscritos → block-on-dependents
+        var put = await fix.AdminPut($"/api/torneos/{fix.WorldsId}", new { nombre = "X", fechaFin = DateTimeOffset.UtcNow.AddDays(30) });
+        Assert.Equal(HttpStatusCode.Conflict, put.StatusCode);
+        Assert.Equal(HttpStatusCode.Conflict, (await fix.AdminDelete($"/api/torneos/{fix.WorldsId}")).StatusCode);
+    }
+
+    [Fact]
+    public async Task RF06_EliminarTorneo_SinToken401_YNoDueño403()
+    {
+        var (id, _) = await CrearTorneoAsync();
+
+        var sin = await fix.Http.DeleteAsync($"/api/torneos/{id}");
+        Assert.Equal(HttpStatusCode.Unauthorized, sin.StatusCode);
+
+        // org_esl (ESL) no es dueño del torneo (RIOT) → 403
+        var esl = await fix.LoginAsync("org_esl", "OrgDemo2024");
+        var r = await fix.AuthedDelete($"/api/torneos/{id}", esl);
+        Assert.Equal(HttpStatusCode.Forbidden, r.StatusCode);
+
+        await fix.AdminDelete($"/api/torneos/{id}"); // limpieza
+    }
 }

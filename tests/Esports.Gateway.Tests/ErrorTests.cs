@@ -86,7 +86,21 @@ public class ErrorTests(GatewayFixture fix, ITestOutputHelper output)
     [Fact]
     public async Task POST_CrearVideojuego_SinGenero_Devuelve400()
     {
-        var r = await fix.AdminPost("/api/videojuegos", new { nombre = "TestGame" }); // falta genero
+        var r = await fix.AdminPost("/api/videojuegos", new { nombre = "TestGame", plataforma = "PC" }); // falta genero
+        Assert.Equal(HttpStatusCode.BadRequest, r.StatusCode);
+    }
+
+    [Fact]
+    public async Task POST_CrearVideojuego_SinPlataforma_Devuelve400()
+    {
+        var r = await fix.AdminPost("/api/videojuegos", new { nombre = "TestGame", genero = "FPS" });
+        Assert.Equal(HttpStatusCode.BadRequest, r.StatusCode);
+    }
+
+    [Fact]
+    public async Task POST_CrearOrganizador_SinEmail_Devuelve400()
+    {
+        var r = await fix.AdminPost("/api/organizadores", new { nombre = "Organizador sin contacto" });
         Assert.Equal(HttpStatusCode.BadRequest, r.StatusCode);
     }
 
@@ -100,7 +114,8 @@ public class ErrorTests(GatewayFixture fix, ITestOutputHelper output)
             codigo = $"TF{Guid.NewGuid():N}"[..10].ToUpper(),
             videojuegoId = Guid.NewGuid(),      // ID que no existe
             organizadorId = fix.ESLId,
-            fechaInicio = "2026-12-01T00:00:00Z"
+            fechaInicio = "2026-12-01T00:00:00Z",
+            fechaFin = "2026-12-08T00:00:00Z"
         });
         output.WriteLine($"POST torneo con VJ inexistente → {r.StatusCode}: {await r.Content.ReadAsStringAsync()}");
         Assert.Equal(HttpStatusCode.NotFound, r.StatusCode);
@@ -115,7 +130,8 @@ public class ErrorTests(GatewayFixture fix, ITestOutputHelper output)
             codigo = $"TF{Guid.NewGuid():N}"[..10].ToUpper(),
             videojuegoId = fix.LoLId,
             organizadorId = Guid.NewGuid(),     // ID que no existe
-            fechaInicio = "2026-12-01T00:00:00Z"
+            fechaInicio = "2026-12-01T00:00:00Z",
+            fechaFin = "2026-12-08T00:00:00Z"
         });
         Assert.Equal(HttpStatusCode.NotFound, r.StatusCode);
     }
@@ -189,16 +205,12 @@ public class ErrorTests(GatewayFixture fix, ITestOutputHelper output)
         }
     }
 
-    // ─── Métodos HTTP incorrectos → 405 ─────────────────────────────────────────
+    // ─── Mutaciones protegidas ───────────────────────────────────────────────────
 
     [Fact]
-    public async Task DELETE_EnEndpointSoloGET_Devuelve405o404()
+    public async Task DELETE_Equipo_SinToken_Devuelve401()
     {
-        // No existe ningún DELETE en la API
         var r = await fix.Http.DeleteAsync($"/api/equipos/{fix.T1Id}");
-        Assert.True(
-            r.StatusCode == HttpStatusCode.MethodNotAllowed ||
-            r.StatusCode == HttpStatusCode.NotFound,
-            $"Se esperaba 405 o 404, fue {r.StatusCode}");
+        Assert.Equal(HttpStatusCode.Unauthorized, r.StatusCode);
     }
 }

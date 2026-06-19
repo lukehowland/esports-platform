@@ -201,7 +201,8 @@ internal static class SeederApp
         var created = await PostAsync<VideojuegoResponse>(http, "/api/videojuegos", new
         {
             nombre = seed.Nombre,
-            genero = genre
+            genero = genre,
+            plataforma = seed.Plataforma
         });
         Console.WriteLine($"Videojuego creado: {created.Nombre}");
         return created;
@@ -217,9 +218,11 @@ internal static class SeederApp
             return match;
         }
 
+        var email = string.IsNullOrWhiteSpace(seed.Email) ? $"contacto+{seed.Code.ToLowerInvariant()}@esports.gg" : seed.Email;
         var created = await PostAsync<OrganizadorResponse>(http, "/api/organizadores", new
         {
-            nombre = seed.Nombre
+            nombre = seed.Nombre,
+            email
         });
         Console.WriteLine($"Organizador creado: {created.Nombre}");
         return created;
@@ -257,10 +260,18 @@ internal static class SeederApp
             nickname,
             nombre = seed.Nombre.Trim(),
             pais = NormalizeCode(seed.Pais),
-            rol = seed.Rol.Trim()
+            rol = seed.Rol.Trim(),
+            email = ContactoEmail(nickname),
+            telefono = ContactoTelefono(nickname)
         });
         Console.WriteLine($"  Jugador creado: {created.Nickname}");
     }
+
+    private static string ContactoEmail(string nickname) =>
+        $"{new string(nickname.Where(char.IsLetterOrDigit).ToArray()).ToLowerInvariant()}@esports.gg";
+
+    private static string ContactoTelefono(string nickname) =>
+        $"+1-555-{1000 + Math.Abs(nickname.Sum(c => c)) % 9000}";
 
     // RF-03: siembra un traspaso real (KC -> FNC, ambos LoL) para que el historial de
     // equipos del jugador tenga dos entradas en la demo. No toca rosters fijados por tests.
@@ -278,7 +289,9 @@ internal static class SeederApp
                 nickname = nick,
                 nombre = "Alex Wanderer",
                 pais = "FR",
-                rol = "JUNGLE"
+                rol = "JUNGLE",
+                email = ContactoEmail(nick),
+                telefono = ContactoTelefono(nick)
             });
             Console.WriteLine($"  Jugador demo de traspaso creado: {jugador.Nickname} ({jugador.Codigo}) en {origen.Tag}");
         }
@@ -310,13 +323,16 @@ internal static class SeederApp
             return full;
         }
 
+        var fechaInicio = ParseUtc(seed.FechaInicio);
+        var fechaFin = string.IsNullOrWhiteSpace(seed.FechaFin) ? fechaInicio.AddDays(10) : ParseUtc(seed.FechaFin);
         var created = await PostAsync<TorneoResponse>(http, "/api/torneos", new
         {
             nombre = seed.Nombre,
             codigo = code,
             videojuegoId = games[seed.GameCode].VideojuegoId,
             organizadorId = organizers[seed.OrganizerCode].OrganizadorId,
-            fechaInicio = ParseUtc(seed.FechaInicio)
+            fechaInicio,
+            fechaFin
         });
         Console.WriteLine($"Torneo creado: {created.Codigo} - {created.Nombre}");
         return created;
@@ -511,11 +527,11 @@ internal static class SeedData
 {
     public static readonly GameSeed[] Games =
     [
-        new("LOL", "League of Legends", "MOBA"),
-        new("VAL", "Valorant", "FPS"),
-        new("CS2", "Counter-Strike 2", "FPS"),
-        new("DOTA2", "Dota 2", "MOBA"),
-        new("RL", "Rocket League", "SPORTS")
+        new("LOL", "League of Legends", "MOBA", "PC"),
+        new("VAL", "Valorant", "FPS", "PC"),
+        new("CS2", "Counter-Strike 2", "FPS", "PC"),
+        new("DOTA2", "Dota 2", "MOBA", "PC"),
+        new("RL", "Rocket League", "SPORTS", "Cross-platform")
     ];
 
     public static readonly OrganizerSeed[] Organizers =
@@ -711,8 +727,8 @@ internal static class SeedData
     }
 }
 
-internal sealed record GameSeed(string Code, string Nombre, string Genero);
-internal sealed record OrganizerSeed(string Code, string Nombre);
+internal sealed record GameSeed(string Code, string Nombre, string Genero, string Plataforma = "PC");
+internal sealed record OrganizerSeed(string Code, string Nombre, string Email = "");
 internal sealed record TeamSeed(string Key, string Nombre, string Tag, string Pais, string GameCode, string[] PlayerCountries, PlayerSeed[]? Players = null);
 internal sealed record PlayerSeed(string Nickname, string Nombre, string Pais, string Rol);
 internal sealed record TournamentSeed(
@@ -725,7 +741,8 @@ internal sealed record TournamentSeed(
     decimal BasePrize,
     string[] TeamKeys,
     bool GeneratePrizePack = true,
-    bool GenerateMatches = true);
+    bool GenerateMatches = true,
+    string FechaFin = "");
 internal sealed record PrizeSeed(string Tipo, decimal Monto, Guid EquipoId);
 internal sealed record GeneratedMatch(EquipoResponse Local, EquipoResponse Visitante, EquipoResponse Ganador, string Resultado, DateTimeOffset Fecha);
 

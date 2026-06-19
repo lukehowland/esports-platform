@@ -2,7 +2,7 @@
 
 import { useParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
-import { Trophy, RefreshCw } from "lucide-react";
+import { Trophy, RefreshCw, CalendarRange } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -50,7 +50,11 @@ export default function TorneoDetallePage() {
           <Badge variant="secondary" className="font-mono">{torneo.codigo}</Badge>
         </div>
         <p className="text-sm text-muted-foreground">
-          {torneo.nombreVideojuego} · {torneo.nombreOrganizador} · {formatDate(torneo.fechaInicio)}
+          {torneo.nombreVideojuego} · {torneo.nombreOrganizador}
+        </p>
+        <p className="mt-1 flex items-center gap-1 text-xs text-muted-foreground">
+          <CalendarRange className="h-3.5 w-3.5" />
+          {formatDate(torneo.fechaInicio)} → {formatDate(torneo.fechaFin)}
         </p>
       </div>
 

@@ -8,6 +8,8 @@ public class Jugador
     public string Nombre { get; set; } = string.Empty;
     public string Pais { get; set; } = string.Empty;
     public string Rol { get; set; } = string.Empty;
+    public string Email { get; set; } = string.Empty;
+    public string Telefono { get; set; } = string.Empty;
     // Equipo activo actual. Null = agente libre (entre equipos, sin roster).
     public Guid? EquipoId { get; set; }
     public DateTimeOffset FechaRegistro { get; set; }

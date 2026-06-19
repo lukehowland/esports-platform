@@ -13,6 +13,8 @@ public interface IJugadorService
     Task<IEnumerable<MembresiaResponse>?> ObtenerMembresiasAsync(Guid jugadorId);
     Task<LiberacionResultado> LiberarAsync(Guid jugadorId);
     Task<AsignacionResultado> AsignarAsync(Guid jugadorId, Guid equipoDestinoId, string? rol, bool esAdmin);
+    Task<bool> ActualizarContactoAsync(Guid jugadorId, EditarJugadorRequest req);
+    Task<EliminacionResultado> EliminarAsync(Guid jugadorId);
 }
 
 public class JugadorService : IJugadorService
@@ -104,6 +106,23 @@ public class JugadorService : IJugadorService
         return AsignacionResultado.Ok;
     }
 
+    public async Task<bool> ActualizarContactoAsync(Guid jugadorId, EditarJugadorRequest req)
+    {
+        var jugador = await _repo.ObtenerPorIdAsync(jugadorId);
+        if (jugador is null) return false;
+        await _repo.ActualizarContactoAsync(jugador, req.Nombre.Trim(), req.Email.Trim(), req.Telefono.Trim());
+        return true;
+    }
+
+    public async Task<EliminacionResultado> EliminarAsync(Guid jugadorId)
+    {
+        var jugador = await _repo.ObtenerPorIdAsync(jugadorId);
+        if (jugador is null) return EliminacionResultado.NoEncontrado;
+        if (jugador.EquipoId is not null) return EliminacionResultado.TieneEquipoActivo;
+        await _repo.EliminarAsync(jugador);
+        return EliminacionResultado.Ok;
+    }
+
     private static JugadorResponse Map(Jugador j) =>
-        new(j.JugadorId, j.Codigo, j.Nickname, j.Nombre, j.Pais, j.Rol, j.EquipoId);
+        new(j.JugadorId, j.Codigo, j.Nickname, j.Nombre, j.Pais, j.Rol, j.Email, j.Telefono, j.EquipoId);
 }

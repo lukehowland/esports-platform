@@ -22,6 +22,40 @@ public class EquiposController : ControllerBase
         return CreatedAtAction(nameof(ObtenerPorId), new { equipoId = result.EquipoId }, result);
     }
 
+    // RF-02: editar equipo (admin; bloqueado si tiene roster)
+    [HttpPut("{equipoId:guid}")]
+    [Authorize(Roles = AuthConstants.Roles.Admin)]
+    public async Task<IActionResult> EditarEquipo(Guid equipoId, [FromBody] EditarEquipoRequest request)
+    {
+        return await _service.ActualizarEquipoAsync(equipoId, request) switch
+        {
+            MutacionResultado.Ok => Ok(await _service.ObtenerPorIdAsync(equipoId)),
+            MutacionResultado.NoEncontrado => NotFound(),
+            MutacionResultado.ConDependencias => Problem(
+                title: "Equipo con roster",
+                statusCode: StatusCodes.Status409Conflict,
+                detail: "No se puede editar un equipo que tiene jugadores. Liberá su roster primero."),
+            _ => Problem(statusCode: StatusCodes.Status500InternalServerError)
+        };
+    }
+
+    // RF-02: eliminar equipo (admin; bloqueado si tiene roster)
+    [HttpDelete("{equipoId:guid}")]
+    [Authorize(Roles = AuthConstants.Roles.Admin)]
+    public async Task<IActionResult> EliminarEquipo(Guid equipoId)
+    {
+        return await _service.EliminarEquipoAsync(equipoId) switch
+        {
+            MutacionResultado.Ok => NoContent(),
+            MutacionResultado.NoEncontrado => NotFound(),
+            MutacionResultado.ConDependencias => Problem(
+                title: "Equipo con roster",
+                statusCode: StatusCodes.Status409Conflict,
+                detail: "No se puede eliminar un equipo que tiene jugadores. Liberá su roster primero."),
+            _ => Problem(statusCode: StatusCodes.Status500InternalServerError)
+        };
+    }
+
     [HttpGet("{equipoId:guid}")]
     public async Task<IActionResult> ObtenerPorId(Guid equipoId)
     {

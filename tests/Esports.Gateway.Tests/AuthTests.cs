@@ -171,7 +171,8 @@ public class AuthTests(GatewayFixture fix)
         var response = await fix.AuthedPost("/api/videojuegos", new
         {
             nombre = $"Fan Game {Guid.NewGuid():N}"[..18],
-            genero = "FPS"
+            genero = "FPS",
+            plataforma = "PC"
         }, fanToken);
 
         Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
@@ -185,7 +186,8 @@ public class AuthTests(GatewayFixture fix)
         var response = await fix.AuthedPost("/api/videojuegos", new
         {
             nombre = $"Auth Test Game {Guid.NewGuid():N}"[..28],
-            genero = "AUTH"
+            genero = "AUTH",
+            plataforma = "PC"
         }, riotToken);
 
         Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
@@ -198,7 +200,8 @@ public class AuthTests(GatewayFixture fix)
 
         var response = await fix.AuthedPost("/api/organizadores", new
         {
-            nombre = $"Auth Org {Guid.NewGuid():N}"[..20]
+            nombre = $"Auth Org {Guid.NewGuid():N}"[..20],
+            email = "forbidden@test.gg"
         }, riotToken);
 
         Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
@@ -215,7 +218,8 @@ public class AuthTests(GatewayFixture fix)
             codigo = $"AUTH-ESL-{Guid.NewGuid():N}"[..18].ToUpperInvariant(),
             videojuegoId = fix.LoLId,
             organizadorId = fix.ESLId,
-            fechaInicio = "2026-12-01T00:00:00Z"
+            fechaInicio = "2026-12-01T00:00:00Z",
+            fechaFin = "2026-12-08T00:00:00Z"
         }, riotToken);
 
         Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
@@ -232,7 +236,8 @@ public class AuthTests(GatewayFixture fix)
             codigo = $"AUTH-OWN-{Guid.NewGuid():N}"[..18].ToUpperInvariant(),
             videojuegoId = fix.LoLId,
             organizadorId = organizer.OrganizadorId,
-            fechaInicio = "2026-12-02T00:00:00Z"
+            fechaInicio = "2026-12-02T00:00:00Z",
+            fechaFin = "2026-12-09T00:00:00Z"
         }, organizer.Token);
 
         Assert.Equal(HttpStatusCode.Created, response.StatusCode);
@@ -262,7 +267,9 @@ public class AuthTests(GatewayFixture fix)
             nickname = $"CAP{Guid.NewGuid():N}"[..12].ToUpperInvariant(),
             nombre = "Captain Owned Player",
             pais = "CO",
-            rol = "FLEX"
+            rol = "FLEX",
+            email = "captain-owned@test.gg",
+            telefono = "+1-555-1200"
         }, captainToken);
 
         Assert.Equal(HttpStatusCode.Created, response.StatusCode);
@@ -278,10 +285,52 @@ public class AuthTests(GatewayFixture fix)
             nickname = $"BAD{Guid.NewGuid():N}"[..12].ToUpperInvariant(),
             nombre = "Forbidden Player",
             pais = "CO",
-            rol = "FLEX"
+            rol = "FLEX",
+            email = "forbidden-player@test.gg",
+            telefono = "+1-555-1201"
         }, capToken);
 
         Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task CapitanPuedeEditarJugadorPropio_PeroNoAjeno()
+    {
+        var team = await CreateTeamAsync();
+        var captainToken = await CreateCaptainForTeamAsync(team.EquipoId);
+        var nickname = $"EDIT{Guid.NewGuid():N}"[..12].ToUpperInvariant();
+
+        using var crear = await fix.AuthedPost($"/api/equipos/{team.EquipoId}/jugadores", new
+        {
+            nickname,
+            nombre = "Player Before Edit",
+            pais = "CO",
+            rol = "FLEX",
+            email = "before@test.gg",
+            telefono = "+1-555-1300"
+        }, captainToken);
+        crear.EnsureSuccessStatusCode();
+        var jugadorId = GatewayFixture.ParseJson(await crear.Content.ReadAsStringAsync())
+            .GetProperty("jugadorId").GetGuid();
+
+        using var propio = await fix.AuthedPut($"/api/jugadores/{jugadorId}", new
+        {
+            nombre = "Player After Edit",
+            email = "after@test.gg",
+            telefono = "+1-555-1301"
+        }, captainToken);
+        Assert.Equal(HttpStatusCode.OK, propio.StatusCode);
+
+        using var rosterAjeno = await fix.Http.GetAsync($"/api/equipos/{fix.G2Id}/integrantes");
+        var jugadorAjenoId = GatewayFixture.ParseJson(await rosterAjeno.Content.ReadAsStringAsync())
+            .EnumerateArray().First().GetProperty("jugadorId").GetGuid();
+        using var ajeno = await fix.AuthedPut($"/api/jugadores/{jugadorAjenoId}", new
+        {
+            nombre = "Forbidden Edit",
+            email = "forbidden@test.gg",
+            telefono = "+1-555-1302"
+        }, captainToken);
+        Assert.Equal(HttpStatusCode.Forbidden, ajeno.StatusCode);
     }
 
     [Fact]
@@ -471,7 +520,8 @@ public class AuthTests(GatewayFixture fix)
             codigo = $"AUTH-T{Guid.NewGuid():N}"[..18].ToUpperInvariant(),
             videojuegoId = fix.LoLId,
             organizadorId = organizer.OrganizadorId,
-            fechaInicio = "2026-12-03T00:00:00Z"
+            fechaInicio = "2026-12-03T00:00:00Z",
+            fechaFin = "2026-12-10T00:00:00Z"
         }, organizer.Token);
         response.EnsureSuccessStatusCode();
         var doc = GatewayFixture.ParseJson(await response.Content.ReadAsStringAsync());
@@ -483,7 +533,8 @@ public class AuthTests(GatewayFixture fix)
         var suffix = Guid.NewGuid().ToString("N")[..8].ToUpperInvariant();
         using var organizerResponse = await fix.AdminPost("/api/organizadores", new
         {
-            nombre = $"Auth Test Organizer {suffix}"
+            nombre = $"Auth Test Organizer {suffix}",
+            email = $"auth-{suffix.ToLowerInvariant()}@test.gg"
         });
         organizerResponse.EnsureSuccessStatusCode();
         var organizerDoc = GatewayFixture.ParseJson(await organizerResponse.Content.ReadAsStringAsync());

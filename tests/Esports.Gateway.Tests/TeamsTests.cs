@@ -247,7 +247,7 @@ public class TeamsTests(GatewayFixture fix, ITestOutputHelper output)
     {
         var nick = $"mtest{Guid.NewGuid():N}"[..14];
         var r = await fix.AdminPost($"/api/equipos/{equipoId}/jugadores",
-            new { nickname = nick, nombre = "Test Player", pais = "CO", rol });
+            new { nickname = nick, nombre = "Test Player", pais = "CO", rol, email = $"{nick}@test.gg", telefono = "+1-555-0000" });
         r.EnsureSuccessStatusCode();
         var doc = GatewayFixture.ParseJson(await r.Content.ReadAsStringAsync());
         return (doc.GetProperty("jugadorId").GetGuid(), doc.GetProperty("codigo").GetString()!);
@@ -421,5 +421,108 @@ public class TeamsTests(GatewayFixture fix, ITestOutputHelper output)
         var fanToken = await fix.LoginAsync("fan_demo", "FanDemo2024");
         var fan = await fix.AuthedPost($"/api/jugadores/{id}/liberar", new { }, fanToken);
         Assert.Equal(HttpStatusCode.Forbidden, fan.StatusCode);
+    }
+
+    // ─── RF-01: email/telefono + editar/eliminar jugador ────────────────────────
+
+    [Fact]
+    public async Task RF01_AltaJugador_GuardaEmailYTelefono()
+    {
+        var equipo = await CrearEquipoAsync();
+        var (_, codigo) = await CrearJugadorAsync(equipo);
+
+        var r = await fix.Http.GetAsync($"/api/jugadores/por-codigo/{codigo}");
+        var doc = GatewayFixture.ParseJson(await r.Content.ReadAsStringAsync());
+        Assert.False(string.IsNullOrWhiteSpace(doc.GetProperty("email").GetString()));
+        Assert.False(string.IsNullOrWhiteSpace(doc.GetProperty("telefono").GetString()));
+    }
+
+    [Fact]
+    public async Task RF01_EditarJugador_ActualizaContacto()
+    {
+        var equipo = await CrearEquipoAsync();
+        var (id, codigo) = await CrearJugadorAsync(equipo);
+
+        var put = await fix.AdminPut($"/api/jugadores/{id}", new { nombre = "Nuevo Nombre", email = "nuevo@test.gg", telefono = "+1-555-9999" });
+        Assert.Equal(HttpStatusCode.OK, put.StatusCode);
+
+        var doc = GatewayFixture.ParseJson(await (await fix.Http.GetAsync($"/api/jugadores/{id}")).Content.ReadAsStringAsync());
+        Assert.Equal("Nuevo Nombre", doc.GetProperty("nombre").GetString());
+        Assert.Equal("nuevo@test.gg", doc.GetProperty("email").GetString());
+        Assert.Equal("+1-555-9999", doc.GetProperty("telefono").GetString());
+
+        var porCodigo = GatewayFixture.ParseJson(
+            await (await fix.Http.GetAsync($"/api/jugadores/por-codigo/{codigo}")).Content.ReadAsStringAsync());
+        Assert.Equal("Nuevo Nombre", porCodigo.GetProperty("nombre").GetString());
+        Assert.Equal("nuevo@test.gg", porCodigo.GetProperty("email").GetString());
+    }
+
+    [Fact]
+    public async Task RF01_EliminarJugador_AgenteLibreOK_ConEquipo409_NoAdmin403()
+    {
+        var equipo = await CrearEquipoAsync();
+        var (id, _) = await CrearJugadorAsync(equipo);
+
+        // Con equipo activo → 409
+        var conEquipo = await fix.AdminDelete($"/api/jugadores/{id}");
+        Assert.Equal(HttpStatusCode.Conflict, conEquipo.StatusCode);
+
+        // Liberar → agente libre → admin elimina → 204
+        await fix.AdminPost($"/api/jugadores/{id}/liberar", new { });
+        var del = await fix.AdminDelete($"/api/jugadores/{id}");
+        Assert.Equal(HttpStatusCode.NoContent, del.StatusCode);
+
+        // No-admin → 403
+        var (otro, _) = await CrearJugadorAsync(equipo);
+        var fan = await fix.LoginAsync("fan_demo", "FanDemo2024");
+        var r = await fix.AuthedDelete($"/api/jugadores/{otro}", fan);
+        Assert.Equal(HttpStatusCode.Forbidden, r.StatusCode);
+    }
+
+    // ─── RF-02: CRUD admin de equipos ───────────────────────────────────────────
+
+    [Fact]
+    public async Task RF02_EditarEquipoSinRoster_Devuelve200()
+    {
+        var equipo = await CrearEquipoAsync();
+        var original = GatewayFixture.ParseJson(
+            await (await fix.Http.GetAsync($"/api/equipos/{equipo}")).Content.ReadAsStringAsync());
+        var tagAnterior = original.GetProperty("tag").GetString()!;
+        var nuevoTag = $"E{Guid.NewGuid():N}"[..7].ToUpperInvariant();
+        var put = await fix.AdminPut($"/api/equipos/{equipo}", new { nombre = "Equipo Editado", tag = nuevoTag, pais = "AR" });
+        Assert.Equal(HttpStatusCode.OK, put.StatusCode);
+        Assert.Equal("Equipo Editado", GatewayFixture.ParseJson(await put.Content.ReadAsStringAsync()).GetProperty("nombre").GetString());
+
+        Assert.Equal(HttpStatusCode.NotFound, (await fix.Http.GetAsync($"/api/equipos/por-tag/{tagAnterior}")).StatusCode);
+        var nuevoLookup = await fix.Http.GetAsync($"/api/equipos/por-tag/{nuevoTag}");
+        Assert.Equal(HttpStatusCode.OK, nuevoLookup.StatusCode);
+        Assert.Equal(equipo,
+            GatewayFixture.ParseJson(await nuevoLookup.Content.ReadAsStringAsync()).GetProperty("equipoId").GetGuid());
+    }
+
+    [Fact]
+    public async Task RF02_EliminarEquipo_SinRosterOK_ConRoster409()
+    {
+        var vacio = await CrearEquipoAsync();
+        Assert.Equal(HttpStatusCode.NoContent, (await fix.AdminDelete($"/api/equipos/{vacio}")).StatusCode);
+
+        var conRoster = await CrearEquipoAsync();
+        await CrearJugadorAsync(conRoster);
+        Assert.Equal(HttpStatusCode.Conflict, (await fix.AdminDelete($"/api/equipos/{conRoster}")).StatusCode);
+        var put = await fix.AdminPut($"/api/equipos/{conRoster}", new { nombre = "X", tag = "XYZ", pais = "AR" });
+        Assert.Equal(HttpStatusCode.Conflict, put.StatusCode);
+    }
+
+    [Fact]
+    public async Task RF02_EquipoCrud_SinToken401_NoAdmin403()
+    {
+        var equipo = await CrearEquipoAsync();
+
+        var sin = await fix.Http.DeleteAsync($"/api/equipos/{equipo}");
+        Assert.Equal(HttpStatusCode.Unauthorized, sin.StatusCode);
+
+        var fan = await fix.LoginAsync("fan_demo", "FanDemo2024");
+        var r = await fix.AuthedDelete($"/api/equipos/{equipo}", fan);
+        Assert.Equal(HttpStatusCode.Forbidden, r.StatusCode);
     }
 }

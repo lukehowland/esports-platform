@@ -19,7 +19,8 @@ public class AdminCrudTests(GatewayFixture fix)
         // Crear
         using var crear = await fix.AdminPost("/api/organizadores", new
         {
-            nombre = $"CRUD Org {Guid.NewGuid():N}"[..20]
+            nombre = $"CRUD Org {Guid.NewGuid():N}"[..20],
+            email = $"crud-{Guid.NewGuid():N}@test.gg"
         });
         Assert.Equal(HttpStatusCode.Created, crear.StatusCode);
         var id = GatewayFixture.ParseJson(await crear.Content.ReadAsStringAsync())
@@ -27,7 +28,8 @@ public class AdminCrudTests(GatewayFixture fix)
 
         // Editar (sin torneos → 200)
         var nuevoNombre = $"CRUD Org Editado {Guid.NewGuid():N}"[..26];
-        using var editar = await fix.AdminPut($"/api/organizadores/{id}", new { nombre = nuevoNombre });
+        var nuevoEmail = $"edit-{Guid.NewGuid():N}@test.gg";
+        using var editar = await fix.AdminPut($"/api/organizadores/{id}", new { nombre = nuevoNombre, email = nuevoEmail });
         Assert.Equal(HttpStatusCode.OK, editar.StatusCode);
 
         // Confirmar el cambio (Q10 lee de organizadores_lista)
@@ -35,6 +37,9 @@ public class AdminCrudTests(GatewayFixture fix)
         var nombres = GatewayFixture.ParseJson(await lista.Content.ReadAsStringAsync())
             .EnumerateArray().Select(e => e.GetProperty("nombre").GetString());
         Assert.Contains(nuevoNombre, nombres);
+        var actualizado = GatewayFixture.ParseJson(await lista.Content.ReadAsStringAsync())
+            .EnumerateArray().Single(e => e.GetProperty("organizadorId").GetGuid() == id);
+        Assert.Equal(nuevoEmail, actualizado.GetProperty("email").GetString());
 
         // Eliminar → 204
         using var eliminar = await fix.AdminDelete($"/api/organizadores/{id}");
@@ -56,14 +61,22 @@ public class AdminCrudTests(GatewayFixture fix)
     [Fact]
     public async Task Organizador_ConTorneos_NoSePuedeEditar_Devuelve409()
     {
-        using var r = await fix.AdminPut($"/api/organizadores/{fix.ESLId}", new { nombre = "ESL Renombrado" });
+        using var r = await fix.AdminPut($"/api/organizadores/{fix.ESLId}", new
+        {
+            nombre = "ESL Renombrado",
+            email = "contacto@esl.test"
+        });
         Assert.Equal(HttpStatusCode.Conflict, r.StatusCode);
     }
 
     [Fact]
     public async Task Organizador_EditarInexistente_Devuelve404()
     {
-        using var r = await fix.AdminPut($"/api/organizadores/{Guid.NewGuid()}", new { nombre = "Fantasma" });
+        using var r = await fix.AdminPut($"/api/organizadores/{Guid.NewGuid()}", new
+        {
+            nombre = "Fantasma",
+            email = "fantasma@test.gg"
+        });
         Assert.Equal(HttpStatusCode.NotFound, r.StatusCode);
     }
 
@@ -71,7 +84,11 @@ public class AdminCrudTests(GatewayFixture fix)
     public async Task Organizador_OrganizadorNoPuedeEditar_Devuelve403()
     {
         var riotToken = await fix.LoginAsync("org_riot", "OrgDemo2024");
-        using var r = await fix.AuthedPut($"/api/organizadores/{fix.ESLId}", new { nombre = "Hack" }, riotToken);
+        using var r = await fix.AuthedPut($"/api/organizadores/{fix.ESLId}", new
+        {
+            nombre = "Hack",
+            email = "hack@test.gg"
+        }, riotToken);
         Assert.Equal(HttpStatusCode.Forbidden, r.StatusCode);
     }
 
@@ -80,7 +97,7 @@ public class AdminCrudTests(GatewayFixture fix)
     {
         using var req = new HttpRequestMessage(HttpMethod.Put, $"/api/organizadores/{fix.ESLId}")
         {
-            Content = System.Net.Http.Json.JsonContent.Create(new { nombre = "Anon" }),
+            Content = System.Net.Http.Json.JsonContent.Create(new { nombre = "Anon", email = "anon@test.gg" }),
         };
         using var r = await fix.Http.SendAsync(req);
         Assert.Equal(HttpStatusCode.Unauthorized, r.StatusCode);
@@ -95,7 +112,8 @@ public class AdminCrudTests(GatewayFixture fix)
         using var crear = await fix.AdminPost("/api/videojuegos", new
         {
             nombre = $"CRUD Game {Guid.NewGuid():N}"[..22],
-            genero = "TESTGENA"
+            genero = "TESTGENA",
+            plataforma = "PC"
         });
         Assert.Equal(HttpStatusCode.Created, crear.StatusCode);
         var id = GatewayFixture.ParseJson(await crear.Content.ReadAsStringAsync())
@@ -106,15 +124,18 @@ public class AdminCrudTests(GatewayFixture fix)
         using var editar = await fix.AdminPut($"/api/videojuegos/{id}", new
         {
             nombre = nuevoNombre,
-            genero = "TESTGENB"
+            genero = "TESTGENB",
+            plataforma = "Cross-platform"
         });
         Assert.Equal(HttpStatusCode.OK, editar.StatusCode);
 
         // Aparece en el nuevo género…
         using var nuevoGen = await fix.Http.GetAsync("/api/videojuegos/por-genero/TESTGENB");
         var enB = GatewayFixture.ParseJson(await nuevoGen.Content.ReadAsStringAsync())
-            .EnumerateArray().Select(e => e.GetProperty("videojuegoId").GetGuid());
-        Assert.Contains(id, enB);
+            .EnumerateArray().ToList();
+        Assert.Contains(enB, e => e.GetProperty("videojuegoId").GetGuid() == id);
+        Assert.Equal("Cross-platform",
+            enB.Single(e => e.GetProperty("videojuegoId").GetGuid() == id).GetProperty("plataforma").GetString());
 
         // …y ya no en el viejo
         using var viejoGen = await fix.Http.GetAsync("/api/videojuegos/por-genero/TESTGENA");

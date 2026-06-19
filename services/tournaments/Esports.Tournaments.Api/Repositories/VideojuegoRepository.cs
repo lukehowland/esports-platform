@@ -29,14 +29,14 @@ public class VideojuegoRepository : IVideojuegoRepository
     {
         _session = c.Session;
         _ks = config["Cassandra:Keyspace"] ?? "esports_tournaments";
-        _insBase = _session.Prepare($"INSERT INTO {_ks}.videojuegos (videojuego_id, nombre, genero) VALUES (?, ?, ?)");
-        _insPorGenero = _session.Prepare($"INSERT INTO {_ks}.videojuegos_por_genero (genero, videojuego_id, nombre) VALUES (?, ?, ?)");
-        _selById = _session.Prepare($"SELECT videojuego_id, nombre, genero FROM {_ks}.videojuegos WHERE videojuego_id = ?");
-        _selPorGenero = _session.Prepare($"SELECT videojuego_id, nombre FROM {_ks}.videojuegos_por_genero WHERE genero = ?");
+        _insBase = _session.Prepare($"INSERT INTO {_ks}.videojuegos (videojuego_id, nombre, genero, plataforma) VALUES (?, ?, ?, ?)");
+        _insPorGenero = _session.Prepare($"INSERT INTO {_ks}.videojuegos_por_genero (genero, videojuego_id, nombre, plataforma) VALUES (?, ?, ?, ?)");
+        _selById = _session.Prepare($"SELECT videojuego_id, nombre, genero, plataforma FROM {_ks}.videojuegos WHERE videojuego_id = ?");
+        _selPorGenero = _session.Prepare($"SELECT videojuego_id, nombre, plataforma FROM {_ks}.videojuegos_por_genero WHERE genero = ?");
         _selTorneos = _session.Prepare($"SELECT torneo_id, nombre_torneo, nombre_organizador, fecha_inicio FROM {_ks}.torneos_por_videojuego WHERE videojuego_id = ?");
         _selTorneosLimit = _session.Prepare($"SELECT torneo_id FROM {_ks}.torneos_por_videojuego WHERE videojuego_id = ? LIMIT 1");
-        _updBase = _session.Prepare($"UPDATE {_ks}.videojuegos SET nombre = ?, genero = ? WHERE videojuego_id = ?");
-        _updPorGeneroNombre = _session.Prepare($"UPDATE {_ks}.videojuegos_por_genero SET nombre = ? WHERE genero = ? AND videojuego_id = ?");
+        _updBase = _session.Prepare($"UPDATE {_ks}.videojuegos SET nombre = ?, genero = ?, plataforma = ? WHERE videojuego_id = ?");
+        _updPorGeneroNombre = _session.Prepare($"UPDATE {_ks}.videojuegos_por_genero SET nombre = ?, plataforma = ? WHERE genero = ? AND videojuego_id = ?");
         _delPorGenero = _session.Prepare($"DELETE FROM {_ks}.videojuegos_por_genero WHERE genero = ? AND videojuego_id = ?");
         _delBase = _session.Prepare($"DELETE FROM {_ks}.videojuegos WHERE videojuego_id = ?");
     }
@@ -45,8 +45,8 @@ public class VideojuegoRepository : IVideojuegoRepository
     {
         // BATCH: videojuegos + videojuegos_por_genero
         var batch = new BatchStatement();
-        batch.Add(_insBase.Bind(v.VideojuegoId, v.Nombre, v.Genero));
-        batch.Add(_insPorGenero.Bind(v.Genero, v.VideojuegoId, v.Nombre));
+        batch.Add(_insBase.Bind(v.VideojuegoId, v.Nombre, v.Genero, v.Plataforma));
+        batch.Add(_insPorGenero.Bind(v.Genero, v.VideojuegoId, v.Nombre, v.Plataforma));
         await _session.ExecuteAsync(batch);
     }
 
@@ -54,13 +54,22 @@ public class VideojuegoRepository : IVideojuegoRepository
     {
         var row = (await _session.ExecuteAsync(_selById.Bind(id))).FirstOrDefault();
         if (row is null) return null;
-        return new Videojuego { VideojuegoId = row.GetValue<Guid>("videojuego_id"), Nombre = row.GetValue<string>("nombre"), Genero = row.GetValue<string>("genero") };
+        return new Videojuego
+        {
+            VideojuegoId = row.GetValue<Guid>("videojuego_id"),
+            Nombre = row.GetValue<string>("nombre"),
+            Genero = row.GetValue<string>("genero"),
+            Plataforma = row.GetValue<string>("plataforma") ?? ""
+        };
     }
 
     public async Task<IEnumerable<VideojuegoPorGeneroResponse>> ObtenerPorGeneroAsync(string genero)
     {
         var rows = await _session.ExecuteAsync(_selPorGenero.Bind(genero));
-        return rows.Select(r => new VideojuegoPorGeneroResponse(r.GetValue<Guid>("videojuego_id"), r.GetValue<string>("nombre")));
+        return rows.Select(r => new VideojuegoPorGeneroResponse(
+            r.GetValue<Guid>("videojuego_id"),
+            r.GetValue<string>("nombre"),
+            r.GetValue<string>("plataforma") ?? ""));
     }
 
     public async Task<IEnumerable<TorneoPorVideojuegoResponse>> ObtenerTorneosAsync(Guid videojuegoId)
@@ -85,16 +94,16 @@ public class VideojuegoRepository : IVideojuegoRepository
         // que cambiar de género = borrar la fila vieja + insertar la nueva. Si el género no
         // cambia, basta con actualizar el nombre. Todo en un BATCH para mantener consistencia.
         var batch = new BatchStatement();
-        batch.Add(_updBase.Bind(nuevo.Nombre, nuevo.Genero, nuevo.VideojuegoId));
+        batch.Add(_updBase.Bind(nuevo.Nombre, nuevo.Genero, nuevo.Plataforma, nuevo.VideojuegoId));
 
         if (string.Equals(nuevo.Genero, generoAnterior, StringComparison.Ordinal))
         {
-            batch.Add(_updPorGeneroNombre.Bind(nuevo.Nombre, nuevo.Genero, nuevo.VideojuegoId));
+            batch.Add(_updPorGeneroNombre.Bind(nuevo.Nombre, nuevo.Plataforma, nuevo.Genero, nuevo.VideojuegoId));
         }
         else
         {
             batch.Add(_delPorGenero.Bind(generoAnterior, nuevo.VideojuegoId));
-            batch.Add(_insPorGenero.Bind(nuevo.Genero, nuevo.VideojuegoId, nuevo.Nombre));
+            batch.Add(_insPorGenero.Bind(nuevo.Genero, nuevo.VideojuegoId, nuevo.Nombre, nuevo.Plataforma));
         }
 
         await _session.ExecuteAsync(batch);

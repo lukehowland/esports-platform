@@ -26,16 +26,17 @@ public class VideojuegoService : IVideojuegoService
         {
             VideojuegoId = Guid.NewGuid(),
             Nombre = req.Nombre.Trim(),
-            Genero = req.Genero.Trim().ToUpperInvariant()
+            Genero = req.Genero.Trim().ToUpperInvariant(),
+            Plataforma = req.Plataforma.Trim()
         };
         await _repo.CrearAsync(v);
-        return new VideojuegoResponse(v.VideojuegoId, v.Nombre, v.Genero);
+        return new VideojuegoResponse(v.VideojuegoId, v.Nombre, v.Genero, v.Plataforma);
     }
 
     public async Task<VideojuegoResponse?> ObtenerPorIdAsync(Guid id)
     {
         var v = await _repo.ObtenerPorIdAsync(id);
-        return v is null ? null : new VideojuegoResponse(v.VideojuegoId, v.Nombre, v.Genero);
+        return v is null ? null : new VideojuegoResponse(v.VideojuegoId, v.Nombre, v.Genero, v.Plataforma);
     }
 
     public Task<IEnumerable<VideojuegoPorGeneroResponse>> ObtenerPorGeneroAsync(string genero)
@@ -60,9 +61,10 @@ public class VideojuegoService : IVideojuegoService
             VideojuegoId = id,
             Nombre = req.Nombre.Trim(),
             Genero = req.Genero.Trim().ToUpperInvariant(),
+            Plataforma = req.Plataforma.Trim()
         };
         await _repo.ActualizarAsync(nuevo, actual.Genero);
-        return (MutacionResultado.Ok, new VideojuegoResponse(nuevo.VideojuegoId, nuevo.Nombre, nuevo.Genero));
+        return (MutacionResultado.Ok, new VideojuegoResponse(nuevo.VideojuegoId, nuevo.Nombre, nuevo.Genero, nuevo.Plataforma));
     }
 
     public async Task<MutacionResultado> EliminarAsync(Guid id)

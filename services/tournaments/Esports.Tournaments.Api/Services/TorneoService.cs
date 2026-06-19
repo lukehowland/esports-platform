@@ -10,6 +10,8 @@ public interface ITorneoService
     Task<TorneoResponse?> ObtenerPorIdAsync(Guid id);
     Task<IEnumerable<TorneoResumenResponse>> ObtenerPorFechaAsync();
     Task<TorneoPorCodigoResponse?> ObtenerPorCodigoAsync(string codigo);
+    Task<(MutacionResultado Resultado, TorneoResponse? Torneo)> ActualizarAsync(Guid id, EditarTorneoRequest req);
+    Task<MutacionResultado> EliminarAsync(Guid id);
 }
 
 public class TorneoService : ITorneoService
@@ -42,18 +44,19 @@ public class TorneoService : ITorneoService
             NombreVideojuego = videojuego.Nombre,
             OrganizadorId = organizador.OrganizadorId,
             NombreOrganizador = organizador.Nombre,
-            FechaInicio = req.FechaInicio
+            FechaInicio = req.FechaInicio,
+            FechaFin = req.FechaFin
         };
         await _torneoRepo.CrearAsync(t);
         return new TorneoResponse(t.TorneoId, t.Nombre, t.Codigo, t.VideojuegoId, t.NombreVideojuego,
-            t.OrganizadorId, t.NombreOrganizador, t.FechaInicio);
+            t.OrganizadorId, t.NombreOrganizador, t.FechaInicio, t.FechaFin);
     }
 
     public async Task<TorneoResponse?> ObtenerPorIdAsync(Guid id)
     {
         var t = await _torneoRepo.ObtenerPorIdAsync(id);
         return t is null ? null : new TorneoResponse(t.TorneoId, t.Nombre, t.Codigo, t.VideojuegoId,
-            t.NombreVideojuego, t.OrganizadorId, t.NombreOrganizador, t.FechaInicio);
+            t.NombreVideojuego, t.OrganizadorId, t.NombreOrganizador, t.FechaInicio, t.FechaFin);
     }
 
     public Task<IEnumerable<TorneoResumenResponse>> ObtenerPorFechaAsync()
@@ -61,4 +64,32 @@ public class TorneoService : ITorneoService
 
     public Task<TorneoPorCodigoResponse?> ObtenerPorCodigoAsync(string codigo)
         => _torneoRepo.ObtenerPorCodigoAsync(codigo);
+
+    public async Task<(MutacionResultado Resultado, TorneoResponse? Torneo)> ActualizarAsync(Guid id, EditarTorneoRequest req)
+    {
+        var t = await _torneoRepo.ObtenerPorIdAsync(id);
+        if (t is null) return (MutacionResultado.NoEncontrado, null);
+
+        // Block-on-dependents: el nombre se copia a torneos_por_equipo y a partidas; editar
+        // con inscritos/premios dejaría datos inconsistentes en otras particiones/servicios.
+        if (await _torneoRepo.TieneDependientesAsync(id))
+            return (MutacionResultado.ConDependencias, null);
+
+        var nuevoNombre = req.Nombre.Trim();
+        await _torneoRepo.ActualizarAsync(t, nuevoNombre, req.FechaFin);
+        return (MutacionResultado.Ok, new TorneoResponse(t.TorneoId, nuevoNombre, t.Codigo, t.VideojuegoId,
+            t.NombreVideojuego, t.OrganizadorId, t.NombreOrganizador, t.FechaInicio, req.FechaFin));
+    }
+
+    public async Task<MutacionResultado> EliminarAsync(Guid id)
+    {
+        var t = await _torneoRepo.ObtenerPorIdAsync(id);
+        if (t is null) return MutacionResultado.NoEncontrado;
+
+        if (await _torneoRepo.TieneDependientesAsync(id))
+            return MutacionResultado.ConDependencias;
+
+        await _torneoRepo.EliminarAsync(t);
+        return MutacionResultado.Ok;
+    }
 }

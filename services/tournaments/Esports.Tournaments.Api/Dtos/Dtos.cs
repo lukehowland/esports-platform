@@ -5,19 +5,23 @@ namespace Esports.Tournaments.Api.Dtos;
 // Videojuegos
 public record CrearVideojuegoRequest(
     [Required, RegularExpression(@".*\S.*"), MaxLength(120)] string Nombre,
-    [Required, RegularExpression(@".*\S.*"), MaxLength(40)] string Genero);
+    [Required, RegularExpression(@".*\S.*"), MaxLength(40)] string Genero,
+    [Required, RegularExpression(@".*\S.*"), MaxLength(40)] string Plataforma);
 public record EditarVideojuegoRequest(
     [Required, RegularExpression(@".*\S.*"), MaxLength(120)] string Nombre,
-    [Required, RegularExpression(@".*\S.*"), MaxLength(40)] string Genero);
-public record VideojuegoResponse(Guid VideojuegoId, string Nombre, string Genero);
-public record VideojuegoPorGeneroResponse(Guid VideojuegoId, string Nombre);
+    [Required, RegularExpression(@".*\S.*"), MaxLength(40)] string Genero,
+    [Required, RegularExpression(@".*\S.*"), MaxLength(40)] string Plataforma);
+public record VideojuegoResponse(Guid VideojuegoId, string Nombre, string Genero, string Plataforma);
+public record VideojuegoPorGeneroResponse(Guid VideojuegoId, string Nombre, string Plataforma);
 
 // Organizadores
 public record CrearOrganizadorRequest(
-    [Required, RegularExpression(@".*\S.*"), MaxLength(120)] string Nombre);
+    [Required, RegularExpression(@".*\S.*"), MaxLength(120)] string Nombre,
+    [Required, EmailAddress, MaxLength(160)] string Email);
 public record EditarOrganizadorRequest(
-    [Required, RegularExpression(@".*\S.*"), MaxLength(120)] string Nombre);
-public record OrganizadorResponse(Guid OrganizadorId, string Nombre);
+    [Required, RegularExpression(@".*\S.*"), MaxLength(120)] string Nombre,
+    [Required, EmailAddress, MaxLength(160)] string Email);
+public record OrganizadorResponse(Guid OrganizadorId, string Nombre, string Email);
 
 // Torneos
 public record CrearTorneoRequest(
@@ -25,7 +29,12 @@ public record CrearTorneoRequest(
     [Required, RegularExpression(@".*\S.*"), MaxLength(32)] string Codigo,
     Guid VideojuegoId,
     Guid OrganizadorId,
-    DateTimeOffset FechaInicio);
+    DateTimeOffset FechaInicio,
+    DateTimeOffset FechaFin);
+
+public record EditarTorneoRequest(
+    [Required, RegularExpression(@".*\S.*"), MaxLength(160)] string Nombre,
+    DateTimeOffset FechaFin);
 
 public record TorneoResponse(
     Guid TorneoId,
@@ -35,7 +44,8 @@ public record TorneoResponse(
     string NombreVideojuego,
     Guid OrganizadorId,
     string NombreOrganizador,
-    DateTimeOffset FechaInicio);
+    DateTimeOffset FechaInicio,
+    DateTimeOffset FechaFin);
 
 public record TorneoResumenResponse(
     Guid TorneoId,

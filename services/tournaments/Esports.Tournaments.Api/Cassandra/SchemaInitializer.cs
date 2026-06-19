@@ -51,6 +51,7 @@ public class SchemaInitializer
                     videojuego_id uuid,
                     nombre        text,
                     genero        text,
+                    plataforma    text,
                     PRIMARY KEY (videojuego_id)
                 )"));
 
@@ -58,6 +59,7 @@ public class SchemaInitializer
                 CREATE TABLE IF NOT EXISTS organizadores (
                     organizador_id uuid,
                     nombre         text,
+                    email          text,
                     PRIMARY KEY (organizador_id)
                 )"));
 
@@ -71,6 +73,7 @@ public class SchemaInitializer
                     organizador_id     uuid,
                     nombre_organizador text,
                     fecha_inicio       timestamp,
+                    fecha_fin          timestamp,
                     PRIMARY KEY (torneo_id)
                 )"));
 
@@ -80,6 +83,7 @@ public class SchemaInitializer
                     genero        text,
                     videojuego_id uuid,
                     nombre        text,
+                    plataforma    text,
                     PRIMARY KEY ((genero), videojuego_id)
                 ) WITH CLUSTERING ORDER BY (videojuego_id ASC)"));
 
@@ -100,6 +104,7 @@ public class SchemaInitializer
                     bucket         text,
                     organizador_id uuid,
                     nombre         text,
+                    email          text,
                     PRIMARY KEY ((bucket), organizador_id)
                 ) WITH CLUSTERING ORDER BY (organizador_id ASC)"));
 
@@ -179,6 +184,23 @@ public class SchemaInitializer
                     tipo          text,
                     PRIMARY KEY ((equipo_id), monto, premio_id)
                 ) WITH CLUSTERING ORDER BY (monto DESC, premio_id ASC)"));
+
+            // Volúmenes existentes: agregar columnas nuevas de forma idempotente
+            // (CREATE ... IF NOT EXISTS no toca tablas ya creadas). Cassandra falla si la
+            // columna ya existe; ese caso se ignora.
+            var altLineas = new[]
+            {
+                "ALTER TABLE organizadores ADD email text",
+                "ALTER TABLE organizadores_lista ADD email text",
+                "ALTER TABLE videojuegos ADD plataforma text",
+                "ALTER TABLE videojuegos_por_genero ADD plataforma text",
+                "ALTER TABLE torneos ADD fecha_fin timestamp",
+            };
+            foreach (var alt in altLineas)
+            {
+                try { await session.ExecuteAsync(new SimpleStatement(alt)); }
+                catch (Exception ex) { _logger.LogDebug("{Alt} omitido (probablemente ya existe): {Msg}", alt, ex.Message); }
+            }
 
             _logger.LogInformation("Schema for keyspace {Keyspace} initialized successfully.", keyspace);
         });

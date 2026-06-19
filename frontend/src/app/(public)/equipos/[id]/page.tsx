@@ -234,7 +234,9 @@ export default function EquipoDetallePage() {
               <TableBody>
                 {torneos?.map((t) => (
                   <TableRow key={t.torneoId}>
-                    <TableCell className="font-medium">{t.nombreTorneo}</TableCell>
+                    <TableCell className="font-medium">
+                      <Link href={`/torneos/${t.torneoId}`} className="hover:text-violet hover:underline">{t.nombreTorneo}</Link>
+                    </TableCell>
                     <TableCell className="text-muted-foreground">{t.nombreVideojuego}</TableCell>
                     <TableCell className="text-muted-foreground">{formatDate(t.fechaInicio)}</TableCell>
                   </TableRow>

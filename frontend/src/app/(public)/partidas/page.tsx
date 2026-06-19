@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useQueries, useQuery } from "@tanstack/react-query";
+import Link from "next/link";
 import { Swords, Calendar, Users, Radio } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { HudPanel, HudEyebrow } from "@/components/hud-panel";
@@ -35,7 +36,11 @@ function PartidasRecientes() {
     })),
     combine: (results) => {
       const partidas = results.flatMap((r, i) =>
-        (r.data ?? []).map((p) => ({ ...p, nombreTorneo: torneos?.[i]?.nombreTorneo ?? "" }))
+        (r.data ?? []).map((p) => ({
+          ...p,
+          nombreTorneo: torneos?.[i]?.nombreTorneo ?? "",
+          torneoId: torneos?.[i]?.torneoId ?? "",
+        }))
       );
       partidas.sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime());
       return { partidas, cargandoPartidas: results.some((r) => r.isLoading) };
@@ -71,7 +76,9 @@ function PartidasRecientes() {
         <TableBody>
           {recientes.map((p) => (
             <TableRow key={p.partidaId}>
-              <TableCell className="text-muted-foreground text-sm">{p.nombreTorneo}</TableCell>
+              <TableCell className="text-sm">
+                <Link href={`/torneos/${p.torneoId}`} className="text-muted-foreground hover:text-violet hover:underline">{p.nombreTorneo}</Link>
+              </TableCell>
               <TableCell className="font-medium">{p.nombreLocal}</TableCell>
               <TableCell className="text-muted-foreground">{p.nombreVisitante}</TableCell>
               <TableCell><ResultadoBadge resultado={p.resultado} /></TableCell>
